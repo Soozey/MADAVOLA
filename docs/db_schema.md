@@ -33,3 +33,21 @@
 - code (nullable), name, name_normalized
 - unique(version_id, commune_id, code)
 - unique(version_id, commune_id, name_normalized)
+
+### actors
+- id (PK)
+- type_personne, nom, prenoms
+- telephone (unique), email (unique)
+- status, created_at
+
+### actor_roles
+- id (PK), actor_id (FK actors)
+- role, status, valid_from, valid_to
+
+### actor_auth
+- id (PK), actor_id (FK actors, unique)
+- password_hash, is_active
+
+### refresh_tokens
+- id (PK), actor_id (FK actors)
+- token_id (unique), expires_at, revoked_at

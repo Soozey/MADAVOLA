@@ -72,7 +72,7 @@ paths:
       responses:
         "204":
           description: No Content
-  /me:
+  /auth/me:
     get:
       tags: [auth]
       summary: Current actor profile
@@ -374,11 +374,9 @@ components:
     LoginRequest:
       type: object
       properties:
-        phone: { type: string }
-        otp: { type: string }
-        email: { type: string }
+        identifier: { type: string }
         password: { type: string }
-      required: []
+      required: [identifier, password]
     RefreshRequest:
       type: object
       properties:

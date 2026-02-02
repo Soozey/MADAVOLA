@@ -1,11 +1,15 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import get_db
-from app.main import create_app
-from app.models.base import Base
+os.environ.setdefault("JWT_SECRET", "test-secret")
+
+from app.db import get_db  # noqa: E402
+from app.main import create_app  # noqa: E402
+from app.models.base import Base  # noqa: E402
 
 
 @pytest.fixture()
