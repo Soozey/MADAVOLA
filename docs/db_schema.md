@@ -110,3 +110,10 @@
 - transaction_id (FK trade_transactions)
 - seller_actor_id (FK actors), buyer_actor_id (FK actors)
 - issue_date, total_amount, status
+
+### documents
+- id (PK)
+- doc_type, owner_actor_id (FK actors)
+- related_entity_type, related_entity_id
+- storage_path, original_filename, sha256
+- created_at

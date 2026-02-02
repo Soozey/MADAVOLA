@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("DOCUMENT_STORAGE_DIR", "services/api/tests/.tmp_uploads")
 
 from app.db import get_db  # noqa: E402
 from app.main import create_app  # noqa: E402

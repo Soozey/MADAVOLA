@@ -800,3 +800,14 @@ components:
         payment_id: { type: integer }
         status: { type: string }
         external_ref: { type: string }
+    Document:
+      type: object
+      properties:
+        id: { type: integer }
+        doc_type: { type: string }
+        owner_actor_id: { type: integer }
+        related_entity_type: { type: string }
+        related_entity_id: { type: string }
+        storage_path: { type: string }
+        original_filename: { type: string }
+        sha256: { type: string }
