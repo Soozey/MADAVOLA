@@ -70,6 +70,34 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
     )
 
 
+@router.get("", response_model=list[TransactionOut])
+def list_transactions(
+    seller_actor_id: int | None = None,
+    buyer_actor_id: int | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(TradeTransaction)
+    if seller_actor_id:
+        query = query.filter(TradeTransaction.seller_actor_id == seller_actor_id)
+    if buyer_actor_id:
+        query = query.filter(TradeTransaction.buyer_actor_id == buyer_actor_id)
+    if status:
+        query = query.filter(TradeTransaction.status == status)
+    transactions = query.order_by(TradeTransaction.created_at.desc()).all()
+    return [
+        TransactionOut(
+            id=txn.id,
+            seller_actor_id=txn.seller_actor_id,
+            buyer_actor_id=txn.buyer_actor_id,
+            status=txn.status,
+            total_amount=float(txn.total_amount),
+            currency=txn.currency,
+        )
+        for txn in transactions
+    ]
+
+
 @router.get("/{transaction_id}", response_model=TransactionDetailOut)
 def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
     transaction = (

@@ -145,3 +145,26 @@ def test_get_transaction_details(client, db_session):
     payload = details.json()
     assert payload["id"] == transaction["id"]
     assert len(payload["items"]) == 1
+
+
+def test_list_transactions_filter(client, db_session):
+    region, district, commune, version = _seed_territory(db_session)
+    seller = _create_actor(
+        db_session, "seller4@example.com", "0340004001", region.id, district.id, commune.id, version.id
+    )
+    buyer = _create_actor(
+        db_session, "buyer4@example.com", "0340004002", region.id, district.id, commune.id, version.id
+    )
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "seller_actor_id": seller.id,
+            "buyer_actor_id": buyer.id,
+            "currency": "MGA",
+            "items": [{"lot_id": None, "quantity": 2, "unit_price": 700}],
+        },
+    )
+
+    response = client.get(f"/api/v1/transactions?seller_actor_id={seller.id}")
+    assert response.status_code == 200
+    assert len(response.json()) >= 1
