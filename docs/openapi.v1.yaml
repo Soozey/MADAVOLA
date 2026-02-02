@@ -1,0 +1,470 @@
+openapi: 3.0.3
+info:
+  title: MADAVOLA API
+  version: v1
+  description: API contract v1 (spec-first). Certains endpoints sont planifiés.
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: actors
+  - name: territories
+  - name: lots
+  - name: transactions
+  - name: payments
+  - name: documents
+  - name: inspections
+  - name: exports
+  - name: admin
+paths:
+  /health:
+    get:
+      tags: [admin]
+      summary: Healthcheck
+      responses:
+        "200":
+          description: OK
+  /ready:
+    get:
+      tags: [admin]
+      summary: Readiness
+      responses:
+        "200":
+          description: OK
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Logout
+      responses:
+        "204":
+          description: No Content
+  /me:
+    get:
+      tags: [auth]
+      summary: Current actor profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Actor"
+  /actors:
+    post:
+      tags: [actors]
+      summary: Create actor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActorCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Actor"
+    get:
+      tags: [actors]
+      summary: List actors
+      parameters:
+        - in: query
+          name: role
+          schema: { type: string }
+        - in: query
+          name: commune_code
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Actor"
+  /actors/{actor_id}:
+    get:
+      tags: [actors]
+      summary: Get actor
+      parameters:
+        - in: path
+          name: actor_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Actor"
+    patch:
+      tags: [actors]
+      summary: Update actor (sensible)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActorUpdate"
+      responses:
+        "200":
+          description: OK
+  /actors/{actor_id}/roles:
+    post:
+      tags: [actors]
+      summary: Add actor role
+      responses:
+        "201":
+          description: Created
+    get:
+      tags: [actors]
+      summary: List actor roles
+      responses:
+        "200":
+          description: OK
+  /territories/import:
+    post:
+      tags: [territories]
+      summary: Import territory Excel
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                version_tag:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+              required: [version_tag, file]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerritoryImportResult"
+  /territories/versions:
+    get:
+      tags: [territories]
+      summary: List territory versions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TerritoryVersion"
+  /territories/regions:
+    get:
+      tags: [territories]
+      summary: List regions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Region"
+  /territories/districts:
+    get:
+      tags: [territories]
+      summary: List districts by region
+      parameters:
+        - in: query
+          name: region_code
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/District"
+  /territories/communes:
+    get:
+      tags: [territories]
+      summary: List communes by district
+      parameters:
+        - in: query
+          name: district_code
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Commune"
+  /territories/fokontany:
+    get:
+      tags: [territories]
+      summary: List fokontany by commune
+      parameters:
+        - in: query
+          name: commune_code
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fokontany"
+  /lots:
+    post:
+      tags: [lots]
+      summary: Declare lot
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LotCreate"
+      responses:
+        "201":
+          description: Created
+    get:
+      tags: [lots]
+      summary: List lots
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: OK
+  /lots/{lot_id}/transfer:
+    post:
+      tags: [lots]
+      summary: Initiate transfer
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: OK
+  /transactions:
+    post:
+      tags: [transactions]
+      summary: Create transaction
+      x-implementation-status: planned
+      responses:
+        "201":
+          description: Created
+  /payments/initiate:
+    post:
+      tags: [payments]
+      summary: Initiate payment
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: OK
+  /payments/webhooks/{provider}:
+    post:
+      tags: [payments]
+      summary: Provider webhook
+      x-implementation-status: planned
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /payments/status/{external_ref}:
+    get:
+      tags: [payments]
+      summary: Payment status
+      x-implementation-status: planned
+      parameters:
+        - in: path
+          name: external_ref
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /documents:
+    post:
+      tags: [documents]
+      summary: Upload document
+      x-implementation-status: planned
+      responses:
+        "201":
+          description: Created
+  /inspections:
+    post:
+      tags: [inspections]
+      summary: Create inspection
+      x-implementation-status: planned
+      responses:
+        "201":
+          description: Created
+  /exports:
+    post:
+      tags: [exports]
+      summary: Create export dossier
+      x-implementation-status: planned
+      responses:
+        "201":
+          description: Created
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        message: { type: string }
+        details: { type: object }
+    AuthTokens:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+    LoginRequest:
+      type: object
+      properties:
+        phone: { type: string }
+        otp: { type: string }
+        email: { type: string }
+        password: { type: string }
+      required: []
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token: { type: string }
+      required: [refresh_token]
+    Actor:
+      type: object
+      properties:
+        id: { type: string }
+        type_personne: { type: string }
+        nom: { type: string }
+        prenoms: { type: string }
+        cin: { type: string }
+        nif: { type: string }
+        stat: { type: string }
+        telephone: { type: string }
+        email: { type: string }
+        region_code: { type: string }
+        district_code: { type: string }
+        commune_code: { type: string }
+        fokontany_code: { type: string }
+        status: { type: string }
+    ActorCreate:
+      type: object
+      properties:
+        type_personne: { type: string }
+        nom: { type: string }
+        prenoms: { type: string }
+        cin: { type: string }
+        telephone: { type: string }
+        region_code: { type: string }
+        district_code: { type: string }
+        commune_code: { type: string }
+        fokontany_code: { type: string }
+      required: [type_personne, nom, cin, telephone, commune_code]
+    ActorUpdate:
+      type: object
+      properties:
+        status: { type: string }
+        justification: { type: string }
+    Region:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+    District:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        region_code: { type: string }
+    Commune:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        district_code: { type: string }
+        commune_mobile_money_msisdn: { type: string, nullable: true }
+    Fokontany:
+      type: object
+      properties:
+        code: { type: string, nullable: true }
+        name: { type: string }
+        commune_code: { type: string }
+    TerritoryVersion:
+      type: object
+      properties:
+        version_tag: { type: string }
+        source_filename: { type: string }
+        checksum_sha256: { type: string }
+        status: { type: string }
+        imported_at: { type: string, format: date-time }
+        activated_at: { type: string, format: date-time, nullable: true }
+    TerritoryImportResult:
+      type: object
+      properties:
+        version_tag: { type: string }
+        regions: { type: integer }
+        districts: { type: integer }
+        communes: { type: integer }
+        fokontany: { type: integer }
+    LotCreate:
+      type: object
+      properties:
+        filiere: { type: string }
+        product_type: { type: string }
+        unit: { type: string }
+        quantity: { type: number }
+        geo_point_id: { type: string }

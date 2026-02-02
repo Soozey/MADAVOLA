@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: madavola
+    ports:
+      - "5432:5432"
+    volumes:
+      - madavola_db:/var/lib/postgresql/data
+  api:
+    build:
+      context: ../../services/api
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/madavola
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+volumes:
+  madavola_db:
