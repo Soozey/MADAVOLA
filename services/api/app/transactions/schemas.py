@@ -23,6 +23,24 @@ class TransactionOut(BaseModel):
     currency: str
 
 
+class TransactionItemOut(BaseModel):
+    id: int
+    lot_id: int | None = None
+    quantity: float
+    unit_price: float
+    line_amount: float
+
+
+class TransactionDetailOut(BaseModel):
+    id: int
+    seller_actor_id: int
+    buyer_actor_id: int
+    status: str
+    total_amount: float
+    currency: str
+    items: list[TransactionItemOut]
+
+
 class TransactionPaymentInitiate(BaseModel):
     provider_code: str
     external_ref: str | None = None

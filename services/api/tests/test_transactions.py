@@ -119,3 +119,29 @@ def test_initiate_transaction_payment(client, db_session):
     )
     assert response.status_code == 201
     assert response.json()["status"] == "pending"
+
+
+def test_get_transaction_details(client, db_session):
+    region, district, commune, version = _seed_territory(db_session)
+    seller = _create_actor(
+        db_session, "seller3@example.com", "0340003001", region.id, district.id, commune.id, version.id
+    )
+    buyer = _create_actor(
+        db_session, "buyer3@example.com", "0340003002", region.id, district.id, commune.id, version.id
+    )
+
+    transaction = client.post(
+        "/api/v1/transactions",
+        json={
+            "seller_actor_id": seller.id,
+            "buyer_actor_id": buyer.id,
+            "currency": "MGA",
+            "items": [{"lot_id": None, "quantity": 3, "unit_price": 500}],
+        },
+    ).json()
+
+    details = client.get(f"/api/v1/transactions/{transaction['id']}")
+    assert details.status_code == 200
+    payload = details.json()
+    assert payload["id"] == transaction["id"]
+    assert len(payload["items"]) == 1

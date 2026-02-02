@@ -12,6 +12,8 @@ from app.models.transaction import TradeTransaction, TradeTransactionItem
 from app.transactions.schemas import (
     TransactionCreate,
     TransactionOut,
+    TransactionDetailOut,
+    TransactionItemOut,
     TransactionPaymentInitiate,
     TransactionPaymentOut,
 )
@@ -65,6 +67,40 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
         status=transaction.status,
         total_amount=float(transaction.total_amount),
         currency=transaction.currency,
+    )
+
+
+@router.get("/{transaction_id}", response_model=TransactionDetailOut)
+def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
+    transaction = (
+        db.query(TradeTransaction)
+        .filter(TradeTransaction.id == transaction_id)
+        .first()
+    )
+    if not transaction:
+        raise bad_request("transaction_introuvable")
+    items = (
+        db.query(TradeTransactionItem)
+        .filter(TradeTransactionItem.transaction_id == transaction.id)
+        .all()
+    )
+    return TransactionDetailOut(
+        id=transaction.id,
+        seller_actor_id=transaction.seller_actor_id,
+        buyer_actor_id=transaction.buyer_actor_id,
+        status=transaction.status,
+        total_amount=float(transaction.total_amount),
+        currency=transaction.currency,
+        items=[
+            TransactionItemOut(
+                id=item.id,
+                lot_id=item.lot_id,
+                quantity=float(item.quantity),
+                unit_price=float(item.unit_price),
+                line_amount=float(item.line_amount),
+            )
+            for item in items
+        ],
     )
 
 

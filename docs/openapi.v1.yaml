@@ -320,6 +320,22 @@ paths:
       responses:
         "201":
           description: Created
+  /transactions/{transaction_id}:
+    get:
+      tags: [transactions]
+      summary: Get transaction
+      parameters:
+        - in: path
+          name: transaction_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/TransactionDetail
   /transactions/{transaction_id}/initiate-payment:
     post:
       tags: [transactions]
@@ -811,3 +827,24 @@ components:
         storage_path: { type: string }
         original_filename: { type: string }
         sha256: { type: string }
+    TransactionItem:
+      type: object
+      properties:
+        id: { type: integer }
+        lot_id: { type: integer, nullable: true }
+        quantity: { type: number }
+        unit_price: { type: number }
+        line_amount: { type: number }
+    TransactionDetail:
+      type: object
+      properties:
+        id: { type: integer }
+        seller_actor_id: { type: integer }
+        buyer_actor_id: { type: integer }
+        status: { type: string }
+        total_amount: { type: number }
+        currency: { type: string }
+        items:
+          type: array
+          items:
+            $ref: #/components/schemas/TransactionItem
