@@ -13,6 +13,7 @@ tags:
   - name: lots
   - name: transactions
   - name: payments
+  - name: fees
   - name: documents
   - name: inspections
   - name: exports
@@ -340,6 +341,39 @@ paths:
       responses:
         "200":
           description: OK
+  /fees:
+    post:
+      tags: [fees]
+      summary: Create fee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/FeeCreate
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/Fee
+    get:
+      tags: [fees]
+      summary: List fees
+      parameters:
+        - in: query
+          name: actor_id
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/Fee
   /payments/status/{external_ref}:
     get:
       tags: [payments]
@@ -537,3 +571,22 @@ components:
         external_ref: { type: string }
         status: { type: string }
       required: [external_ref, status]
+    FeeCreate:
+      type: object
+      properties:
+        fee_type: { type: string }
+        actor_id: { type: integer }
+        commune_id: { type: integer }
+        amount: { type: number }
+        currency: { type: string }
+      required: [fee_type, actor_id, commune_id, amount]
+    Fee:
+      type: object
+      properties:
+        id: { type: integer }
+        fee_type: { type: string }
+        actor_id: { type: integer }
+        commune_id: { type: integer }
+        amount: { type: number }
+        currency: { type: string }
+        status: { type: string }

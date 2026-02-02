@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from app.auth.security import hash_password
 from app.models.actor import Actor, ActorAuth
+from app.models.fee import Fee
 from app.models.payment import PaymentProvider, PaymentRequest, WebhookInbox
 from app.models.territory import Commune, District, Region, TerritoryVersion
 
@@ -75,12 +76,25 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
         db_session, "payee@example.com", "0340000010", region.id, district.id, commune.id, version.id
     )
 
+    fee = Fee(
+        fee_type="account_opening_commune",
+        actor_id=payer.id,
+        commune_id=commune.id,
+        amount=10000,
+        currency="MGA",
+        status="pending",
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(fee)
+    db_session.commit()
+
     response = client.post(
         "/api/v1/payments/initiate",
         json={
             "provider_code": "mvola",
             "payer_actor_id": payer.id,
             "payee_actor_id": payee.id,
+            "fee_id": fee.id,
             "amount": 10000,
             "currency": "MGA",
         },
@@ -112,3 +126,5 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
         db_session.query(PaymentRequest).filter_by(external_ref=payload["external_ref"]).first()
     )
     assert request.status == "success"
+    db_session.refresh(fee)
+    assert fee.status == "paid"

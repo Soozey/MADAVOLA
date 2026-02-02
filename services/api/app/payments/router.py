@@ -10,6 +10,7 @@ from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
 from app.models.actor import Actor
+from app.models.fee import Fee
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
 from app.payments.schemas import PaymentInitiate, PaymentInitiateResponse, WebhookPayload
 
@@ -26,6 +27,12 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
     payee = db.query(Actor).filter_by(id=payload.payee_actor_id).first()
     if not payer or not payee:
         raise bad_request("acteur_invalide")
+
+    fee = None
+    if payload.fee_id:
+        fee = db.query(Fee).filter_by(id=payload.fee_id).first()
+        if not fee or fee.status != "pending":
+            raise bad_request("frais_invalide")
 
     if payload.external_ref:
         existing = db.query(PaymentRequest).filter_by(external_ref=payload.external_ref).first()
@@ -45,6 +52,7 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
         provider_id=provider.id,
         payer_actor_id=payload.payer_actor_id,
         payee_actor_id=payload.payee_actor_id,
+        fee_id=fee.id if fee else None,
         amount=payload.amount,
         currency=payload.currency,
         status="pending",
@@ -102,6 +110,14 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
             payment.status = parsed.status
             if parsed.status == "success":
                 payment.confirmed_at = datetime.now(timezone.utc)
+        if parsed.status == "success" and payment_request.fee_id:
+            fee = db.query(Fee).filter_by(id=payment_request.fee_id).first()
+            if fee and fee.status != "paid":
+                fee.status = "paid"
+                fee.paid_at = datetime.now(timezone.utc)
+                actor = db.query(Actor).filter_by(id=fee.actor_id).first()
+                if actor and actor.status == "pending":
+                    actor.status = "active"
 
     db.commit()
     return {"status": "ok", "idempotent": False}

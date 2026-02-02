@@ -82,3 +82,8 @@
 - provider_id (FK payment_providers)
 - external_ref (unique per provider)
 - received_at, payload_hash, status
+
+### fees
+- id (PK)
+- fee_type, actor_id (FK actors), commune_id (FK communes)
+- amount, currency, status, created_at, paid_at
