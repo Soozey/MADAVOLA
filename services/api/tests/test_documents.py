@@ -78,3 +78,65 @@ def test_upload_document(client, db_session):
     assert response.status_code == 201
     doc = db_session.query(Document).first()
     assert doc is not None
+
+
+def test_documents_rbac(client, db_session):
+    from app.auth.security import hash_password
+    from app.models.actor import ActorAuth
+
+    region, district, commune, version = _seed_territory(db_session)
+    owner = Actor(
+        type_personne="physique",
+        nom="DocOwner",
+        prenoms="Owner",
+        telephone="0340003005",
+        email="owner@example.com",
+        status="active",
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        territory_version_id=version.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    other = Actor(
+        type_personne="physique",
+        nom="DocOther",
+        prenoms="Other",
+        telephone="0340003006",
+        email="otherdoc@example.com",
+        status="active",
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        territory_version_id=version.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add_all([owner, other])
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
+    db_session.commit()
+
+    db_session.add(
+        Document(
+            doc_type="facture",
+            owner_actor_id=owner.id,
+            related_entity_type="invoice",
+            related_entity_id="INV-0002",
+            storage_path="data/uploads/INV-0002.json",
+            original_filename="INV-0002.json",
+            sha256="x" * 64,
+        )
+    )
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": other.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    response = client.get(
+        "/api/v1/documents",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []

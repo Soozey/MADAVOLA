@@ -6,11 +6,12 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_current_actor
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
 from app.documents.schemas import DocumentOut
-from app.models.actor import Actor
+from app.models.actor import Actor, ActorRole
 from app.models.document import Document
 
 router = APIRouter(prefix=f"{settings.api_prefix}/documents", tags=["documents"])
@@ -24,10 +25,13 @@ def upload_document(
     related_entity_id: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
 ):
     actor = db.query(Actor).filter_by(id=owner_actor_id).first()
     if not actor:
         raise bad_request("acteur_invalide")
+    if not _is_admin(db, current_actor.id) and owner_actor_id != current_actor.id:
+        raise bad_request("acces_refuse")
     if not file.filename:
         raise bad_request("fichier_obligatoire")
 
@@ -75,8 +79,13 @@ def list_documents(
     related_entity_type: str | None = None,
     related_entity_id: str | None = None,
     db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
 ):
     query = db.query(Document)
+    if not _is_admin(db, current_actor.id):
+        query = query.filter(Document.owner_actor_id == current_actor.id)
+        if owner_actor_id and owner_actor_id != current_actor.id:
+            return []
     if owner_actor_id:
         query = query.filter(Document.owner_actor_id == owner_actor_id)
     if related_entity_type:
@@ -97,3 +106,12 @@ def list_documents(
         )
         for doc in documents
     ]
+
+
+def _is_admin(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
+    )

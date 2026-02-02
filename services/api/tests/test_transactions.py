@@ -168,3 +168,42 @@ def test_list_transactions_filter(client, db_session):
     response = client.get(f"/api/v1/transactions?seller_actor_id={seller.id}")
     assert response.status_code == 200
     assert len(response.json()) >= 1
+
+
+def test_transactions_rbac(client, db_session):
+    from app.auth.security import hash_password
+    from app.models.actor import ActorAuth
+
+    region, district, commune, version = _seed_territory(db_session)
+    seller = _create_actor(
+        db_session, "seller5@example.com", "0340005001", region.id, district.id, commune.id, version.id
+    )
+    buyer = _create_actor(
+        db_session, "buyer5@example.com", "0340005002", region.id, district.id, commune.id, version.id
+    )
+    other = _create_actor(
+        db_session, "other@example.com", "0340005003", region.id, district.id, commune.id, version.id
+    )
+    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
+    db_session.commit()
+
+    transaction = client.post(
+        "/api/v1/transactions",
+        json={
+            "seller_actor_id": seller.id,
+            "buyer_actor_id": buyer.id,
+            "currency": "MGA",
+            "items": [{"lot_id": None, "quantity": 1, "unit_price": 1000}],
+        },
+    ).json()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": other.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    denied = client.get(
+        f"/api/v1/transactions/{transaction['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert denied.status_code == 400

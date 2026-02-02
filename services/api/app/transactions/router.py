@@ -3,10 +3,11 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_current_actor
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
-from app.models.actor import Actor
+from app.models.actor import Actor, ActorRole
 from app.models.payment import Payment, PaymentProvider, PaymentRequest
 from app.models.transaction import TradeTransaction, TradeTransactionItem
 from app.transactions.schemas import (
@@ -76,8 +77,18 @@ def list_transactions(
     buyer_actor_id: int | None = None,
     status: str | None = None,
     db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
 ):
     query = db.query(TradeTransaction)
+    if not _is_admin(db, current_actor.id):
+        query = query.filter(
+            (TradeTransaction.seller_actor_id == current_actor.id)
+            | (TradeTransaction.buyer_actor_id == current_actor.id)
+        )
+        if seller_actor_id and seller_actor_id != current_actor.id:
+            return []
+        if buyer_actor_id and buyer_actor_id != current_actor.id:
+            return []
     if seller_actor_id:
         query = query.filter(TradeTransaction.seller_actor_id == seller_actor_id)
     if buyer_actor_id:
@@ -99,7 +110,11 @@ def list_transactions(
 
 
 @router.get("/{transaction_id}", response_model=TransactionDetailOut)
-def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
+def get_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
     transaction = (
         db.query(TradeTransaction)
         .filter(TradeTransaction.id == transaction_id)
@@ -107,6 +122,9 @@ def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
     )
     if not transaction:
         raise bad_request("transaction_introuvable")
+    if not _is_admin(db, current_actor.id):
+        if current_actor.id not in (transaction.seller_actor_id, transaction.buyer_actor_id):
+            raise bad_request("acces_refuse")
     items = (
         db.query(TradeTransactionItem)
         .filter(TradeTransactionItem.transaction_id == transaction.id)
@@ -129,6 +147,15 @@ def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
             )
             for item in items
         ],
+    )
+
+
+def _is_admin(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
     )
 
 
