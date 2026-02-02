@@ -572,6 +572,22 @@ paths:
                 type: array
                 items:
                   $ref: #/components/schemas/Invoice
+  /invoices/{invoice_id}:
+    get:
+      tags: [documents]
+      summary: Get invoice
+      parameters:
+        - in: path
+          name: invoice_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/Invoice
   /documents:
     post:
       tags: [documents]
