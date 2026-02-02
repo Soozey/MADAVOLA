@@ -6,6 +6,7 @@ class PaymentInitiate(BaseModel):
     payer_actor_id: int
     payee_actor_id: int
     fee_id: int | None = None
+    transaction_id: int | None = None
     amount: float
     currency: str
     external_ref: str | None = None

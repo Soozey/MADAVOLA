@@ -13,7 +13,9 @@ from app.audit.logger import write_audit
 from app.models.actor import Actor
 from app.models.fee import Fee
 from app.auth.dependencies import require_roles
+from app.models.invoice import Invoice
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
+from app.models.transaction import TradeTransaction
 from app.payments.providers_schemas import ProviderCreate, ProviderOut, ProviderUpdate
 from app.payments.schemas import PaymentInitiate, PaymentInitiateResponse, WebhookPayload
 
@@ -108,6 +110,14 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
         if not fee or fee.status != "pending":
             raise bad_request("frais_invalide")
 
+    transaction = None
+    if payload.transaction_id:
+        transaction = (
+            db.query(TradeTransaction).filter_by(id=payload.transaction_id).first()
+        )
+        if not transaction or transaction.status != "pending_payment":
+            raise bad_request("transaction_invalide")
+
     if payload.external_ref:
         existing = db.query(PaymentRequest).filter_by(external_ref=payload.external_ref).first()
         if existing:
@@ -127,6 +137,7 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
         payer_actor_id=payload.payer_actor_id,
         payee_actor_id=payload.payee_actor_id,
         fee_id=fee.id if fee else None,
+        transaction_id=transaction.id if transaction else None,
         amount=payload.amount,
         currency=payload.currency,
         status="pending",
@@ -208,6 +219,32 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
                     entity_type="fee",
                     entity_id=str(fee.id),
                     meta={"payment_request_id": payment_request.id},
+                )
+        if parsed.status == "success" and payment_request.transaction_id:
+            transaction = (
+                db.query(TradeTransaction)
+                .filter_by(id=payment_request.transaction_id)
+                .first()
+            )
+            if transaction and transaction.status != "paid":
+                transaction.status = "paid"
+                invoice_number = f"INV-{transaction.id:08d}"
+                invoice = Invoice(
+                    invoice_number=invoice_number,
+                    transaction_id=transaction.id,
+                    seller_actor_id=transaction.seller_actor_id,
+                    buyer_actor_id=transaction.buyer_actor_id,
+                    total_amount=transaction.total_amount,
+                    status="issued",
+                )
+                db.add(invoice)
+                write_audit(
+                    db,
+                    actor_id=transaction.buyer_actor_id,
+                    action="invoice_issued",
+                    entity_type="invoice",
+                    entity_id=invoice_number,
+                    meta={"transaction_id": transaction.id},
                 )
         if parsed.status == "success":
             write_audit(

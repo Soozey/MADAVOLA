@@ -4,6 +4,7 @@ from app.auth.security import hash_password
 from app.models.actor import Actor, ActorAuth
 from app.models.fee import Fee
 from app.models.payment import PaymentProvider, PaymentRequest, WebhookInbox
+from app.models.transaction import TradeTransaction
 from app.models.territory import Commune, District, Region, TerritoryVersion
 
 
@@ -88,6 +89,16 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     db_session.add(fee)
     db_session.commit()
 
+    transaction = TradeTransaction(
+        seller_actor_id=payee.id,
+        buyer_actor_id=payer.id,
+        status="pending_payment",
+        total_amount=10000,
+        currency="MGA",
+    )
+    db_session.add(transaction)
+    db_session.commit()
+
     response = client.post(
         "/api/v1/payments/initiate",
         json={
@@ -95,6 +106,7 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
             "payer_actor_id": payer.id,
             "payee_actor_id": payee.id,
             "fee_id": fee.id,
+            "transaction_id": transaction.id,
             "amount": 10000,
             "currency": "MGA",
         },
@@ -128,3 +140,5 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     assert request.status == "success"
     db_session.refresh(fee)
     assert fee.status == "paid"
+    db_session.refresh(transaction)
+    assert transaction.status == "paid"

@@ -69,6 +69,7 @@
 - id (PK)
 - provider_id (FK payment_providers)
 - payer_actor_id (FK actors), payee_actor_id (FK actors)
+- fee_id (FK fees), transaction_id (FK trade_transactions)
 - amount, currency, status, external_ref (unique), idempotency_key
 - created_at
 
