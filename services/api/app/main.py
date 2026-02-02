@@ -8,6 +8,7 @@ from app.fees.router import router as fees_router
 from app.geopoints.router import router as geopoints_router
 from app.health.router import router as health_router
 from app.invoices.router import router as invoices_router
+from app.ledger.router import router as ledger_router
 from app.lots.router import router as lots_router
 from app.payments.router import router as payments_router
 from app.payments.providers_router import router as payment_providers_router
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(geopoints_router)
     app.include_router(health_router)
     app.include_router(invoices_router)
+    app.include_router(ledger_router)
     app.include_router(lots_router)
     app.include_router(payments_router)
     app.include_router(payment_providers_router)

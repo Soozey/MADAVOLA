@@ -413,6 +413,43 @@ paths:
                 type: array
                 items:
                   $ref: #/components/schemas/Lot
+  /ledger:
+    get:
+      tags: [lots]
+      summary: List ledger entries
+      parameters:
+        - in: query
+          name: actor_id
+          schema: { type: integer }
+        - in: query
+          name: lot_id
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/LedgerEntry
+  /ledger/balance:
+    get:
+      tags: [lots]
+      summary: Ledger balance
+      parameters:
+        - in: query
+          name: actor_id
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/LedgerBalance
   /documents/{document_id}:
     get:
       tags: [documents]
@@ -1117,3 +1154,20 @@ components:
           type: array
           items: { type: number }
       required: [quantities]
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        actor_id: { type: integer }
+        lot_id: { type: integer }
+        movement_type: { type: string }
+        quantity_delta: { type: number }
+        ref_event_type: { type: string }
+        ref_event_id: { type: string }
+        created_at: { type: string, format: date-time }
+    LedgerBalance:
+      type: object
+      properties:
+        actor_id: { type: integer }
+        lot_id: { type: integer }
+        quantity: { type: number }
