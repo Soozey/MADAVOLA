@@ -8,6 +8,7 @@ from app.auth.security import hash_password
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
+from app.audit.logger import write_audit
 from app.models.actor import Actor, ActorAuth, ActorRole
 from app.models.geo import GeoPoint
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
@@ -105,6 +106,15 @@ def create_actor(payload: ActorCreate, db: Session = Depends(get_db)):
         db.add(ActorRole(actor_id=actor.id, role=role, status="active"))
 
     geo_point.actor_id = actor.id
+    write_audit(
+        db,
+        actor_id=actor.id,
+        action="actor_created",
+        entity_type="actor",
+        entity_id=str(actor.id),
+        justification=None,
+        meta={"roles": roles},
+    )
     db.commit()
     db.refresh(actor)
     return ActorOut(

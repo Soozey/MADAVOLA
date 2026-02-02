@@ -1,4 +1,5 @@
 from app.models import actor  # noqa: F401
+from app.models import audit  # noqa: F401
 from app.models import fee  # noqa: F401
 from app.models import geo  # noqa: F401
 from app.models import payment  # noqa: F401

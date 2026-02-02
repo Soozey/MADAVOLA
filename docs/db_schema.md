@@ -87,3 +87,9 @@
 - id (PK)
 - fee_type, actor_id (FK actors), commune_id (FK communes)
 - amount, currency, status, created_at, paid_at
+
+### audit_logs
+- id (PK)
+- actor_id (FK actors, nullable)
+- action, entity_type, entity_id
+- justification, meta_json, created_at

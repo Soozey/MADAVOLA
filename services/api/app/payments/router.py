@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
+from app.audit.logger import write_audit
 from app.models.actor import Actor
 from app.models.fee import Fee
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
@@ -64,6 +65,15 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
     payment = Payment(payment_request_id=request.id, status="pending")
     db.add(payment)
     db.commit()
+    write_audit(
+        db,
+        actor_id=payload.payer_actor_id,
+        action="payment_initiated",
+        entity_type="payment_request",
+        entity_id=str(request.id),
+        meta={"external_ref": request.external_ref, "amount": str(request.amount)},
+    )
+    db.commit()
 
     return PaymentInitiateResponse(
         payment_request_id=request.id,
@@ -118,6 +128,23 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
                 actor = db.query(Actor).filter_by(id=fee.actor_id).first()
                 if actor and actor.status == "pending":
                     actor.status = "active"
+                write_audit(
+                    db,
+                    actor_id=fee.actor_id,
+                    action="fee_paid",
+                    entity_type="fee",
+                    entity_id=str(fee.id),
+                    meta={"payment_request_id": payment_request.id},
+                )
+        if parsed.status == "success":
+            write_audit(
+                db,
+                actor_id=payment_request.payer_actor_id,
+                action="payment_success",
+                entity_type="payment_request",
+                entity_id=str(payment_request.id),
+                meta={"external_ref": payment_request.external_ref},
+            )
 
     db.commit()
     return {"status": "ok", "idempotent": False}
