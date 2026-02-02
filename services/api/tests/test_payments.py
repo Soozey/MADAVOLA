@@ -152,3 +152,82 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     assert transaction.status == "paid"
     document = db_session.query(Document).filter_by(related_entity_type="invoice").first()
     assert document is not None
+
+
+def test_list_payments_rbac(client, db_session):
+    version = TerritoryVersion(
+        version_tag="v1",
+        source_filename="seed.xlsx",
+        checksum_sha256="seed",
+        status="active",
+        imported_at=datetime.now(timezone.utc),
+        activated_at=datetime.now(timezone.utc),
+    )
+    db_session.add(version)
+    db_session.flush()
+    region = Region(
+        version_id=version.id,
+        code="01",
+        name="Analamanga",
+        name_normalized="analamanga",
+    )
+    db_session.add(region)
+    db_session.flush()
+    district = District(
+        version_id=version.id,
+        region_id=region.id,
+        code="0101",
+        name="Antananarivo Renivohitra",
+        name_normalized="antananarivo",
+    )
+    db_session.add(district)
+    db_session.flush()
+    commune = Commune(
+        version_id=version.id,
+        district_id=district.id,
+        code="010101",
+        name="Antananarivo I",
+        name_normalized="antananarivo i",
+    )
+    db_session.add(commune)
+    db_session.flush()
+
+    provider = PaymentProvider(code="mvola", name="mVola", enabled=True)
+    db_session.add(provider)
+    db_session.commit()
+
+    payer = _create_actor(
+        db_session, "payer2@example.com", "0340000011", region.id, district.id, commune.id, version.id
+    )
+    payee = _create_actor(
+        db_session, "payee2@example.com", "0340000012", region.id, district.id, commune.id, version.id
+    )
+    other = _create_actor(
+        db_session, "other2@example.com", "0340000013", region.id, district.id, commune.id, version.id
+    )
+    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
+    db_session.commit()
+
+    request = PaymentRequest(
+        provider_id=provider.id,
+        payer_actor_id=payer.id,
+        payee_actor_id=payee.id,
+        amount=1000,
+        currency="MGA",
+        status="pending",
+        external_ref="ref-1",
+    )
+    db_session.add(request)
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": other.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    response = client.get(
+        "/api/v1/payments",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []

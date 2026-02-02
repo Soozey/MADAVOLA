@@ -25,6 +25,19 @@ class WebhookPayload(BaseModel):
     status: str
 
 
+class PaymentRequestOut(BaseModel):
+    id: int
+    provider_id: int
+    payer_actor_id: int
+    payee_actor_id: int
+    fee_id: int | None = None
+    transaction_id: int | None = None
+    amount: float
+    currency: str
+    status: str
+    external_ref: str
+
+
 class PaymentProviderCreate(BaseModel):
     code: str
     name: str

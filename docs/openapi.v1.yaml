@@ -380,6 +380,29 @@ paths:
             application/json:
               schema:
                 $ref: #/components/schemas/TransactionPayment
+  /payments:
+    get:
+      tags: [payments]
+      summary: List payments
+      parameters:
+        - in: query
+          name: payer_actor_id
+          schema: { type: integer }
+        - in: query
+          name: payee_actor_id
+          schema: { type: integer }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/PaymentRequest
   /payments/initiate:
     post:
       tags: [payments]
@@ -840,3 +863,16 @@ components:
           type: array
           items:
             $ref: #/components/schemas/TransactionItem
+    PaymentRequest:
+      type: object
+      properties:
+        id: { type: integer }
+        provider_id: { type: integer }
+        payer_actor_id: { type: integer }
+        payee_actor_id: { type: integer }
+        fee_id: { type: integer, nullable: true }
+        transaction_id: { type: integer, nullable: true }
+        amount: { type: number }
+        currency: { type: string }
+        status: { type: string }
+        external_ref: { type: string }

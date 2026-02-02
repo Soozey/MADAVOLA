@@ -18,7 +18,12 @@ from app.models.invoice import Invoice
 from app.models.document import Document
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
 from app.models.transaction import TradeTransaction
-from app.payments.schemas import PaymentInitiate, PaymentInitiateResponse, WebhookPayload
+from app.payments.schemas import (
+    PaymentInitiate,
+    PaymentInitiateResponse,
+    PaymentRequestOut,
+    WebhookPayload,
+)
 
 router = APIRouter(prefix=f"{settings.api_prefix}/payments", tags=["payments"])
 
@@ -234,6 +239,48 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
 
     db.commit()
     return {"status": "ok", "idempotent": False}
+
+
+@router.get("", response_model=list[PaymentRequestOut])
+def list_payments(
+    payer_actor_id: int | None = None,
+    payee_actor_id: int | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    query = db.query(PaymentRequest)
+    if not _is_admin(db, current_actor.id):
+        query = query.filter(
+            (PaymentRequest.payer_actor_id == current_actor.id)
+            | (PaymentRequest.payee_actor_id == current_actor.id)
+        )
+        if payer_actor_id and payer_actor_id != current_actor.id:
+            return []
+        if payee_actor_id and payee_actor_id != current_actor.id:
+            return []
+    if payer_actor_id:
+        query = query.filter(PaymentRequest.payer_actor_id == payer_actor_id)
+    if payee_actor_id:
+        query = query.filter(PaymentRequest.payee_actor_id == payee_actor_id)
+    if status:
+        query = query.filter(PaymentRequest.status == status)
+    payments = query.order_by(PaymentRequest.created_at.desc()).all()
+    return [
+        PaymentRequestOut(
+            id=p.id,
+            provider_id=p.provider_id,
+            payer_actor_id=p.payer_actor_id,
+            payee_actor_id=p.payee_actor_id,
+            fee_id=p.fee_id,
+            transaction_id=p.transaction_id,
+            amount=float(p.amount),
+            currency=p.currency,
+            status=p.status,
+            external_ref=p.external_ref,
+        )
+        for p in payments
+    ]
 
 
 def _is_admin(db: Session, actor_id: int) -> bool:
