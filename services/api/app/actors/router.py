@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor, require_roles
+from app.auth.dependencies import get_current_actor
 from app.auth.security import hash_password
 from app.common.errors import bad_request
 from app.core.config import settings
@@ -132,6 +133,40 @@ def create_actor(payload: ActorCreate, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/{actor_id}", response_model=ActorOut)
+def get_actor(
+    actor_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    if not actor:
+        raise bad_request("acteur_introuvable")
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor.id:
+        raise bad_request("acces_refuse")
+    region = db.query(Region).filter_by(id=actor.region_id).first()
+    district = db.query(District).filter_by(id=actor.district_id).first()
+    commune = db.query(Commune).filter_by(id=actor.commune_id).first()
+    fokontany = (
+        db.query(Fokontany).filter_by(id=actor.fokontany_id).first()
+        if actor.fokontany_id
+        else None
+    )
+    return ActorOut(
+        id=actor.id,
+        type_personne=actor.type_personne,
+        nom=actor.nom,
+        prenoms=actor.prenoms,
+        telephone=actor.telephone,
+        email=actor.email,
+        status=actor.status,
+        region_code=region.code if region else "",
+        district_code=district.code if district else "",
+        commune_code=commune.code if commune else "",
+        fokontany_code=fokontany.code if fokontany else None,
+    )
+
+
 @router.get("", response_model=list[ActorOut])
 def list_actors(
     role: str | None = None,
@@ -190,3 +225,12 @@ def list_actors(
             )
         )
     return results
+
+
+def _is_admin(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
+    )

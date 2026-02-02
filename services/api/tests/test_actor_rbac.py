@@ -102,3 +102,20 @@ def test_commune_agent_scope(client, db_session):
     assert response.status_code == 200
     results = response.json()
     assert all(r["commune_code"] == "010101" for r in results)
+
+
+def test_get_actor_rbac(client, db_session):
+    import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
+    actor = _create_actor(db_session, "010101", "orpailleur", "orp3")
+    other = _create_actor(db_session, "010101", "orpailleur", "orp4")
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": other.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    denied = client.get(
+        f"/api/v1/actors/{actor.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert denied.status_code == 400
