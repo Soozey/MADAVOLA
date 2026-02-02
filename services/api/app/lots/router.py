@@ -6,7 +6,7 @@ from app.audit.logger import write_audit
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
-from app.lots.schemas import LotCreate, LotOut, LotTransfer
+from app.lots.schemas import LotConsolidate, LotCreate, LotOut, LotSplit, LotTransfer
 from app.models.actor import Actor
 from app.models.geo import GeoPoint
 from app.models.lot import InventoryLedger, Lot
@@ -199,3 +199,158 @@ def transfer_lot(
         status=lot.status,
         declare_geo_point_id=lot.declare_geo_point_id,
     )
+
+
+@router.post("/consolidate", response_model=LotOut, status_code=201)
+def consolidate_lots(
+    payload: LotConsolidate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    if len(payload.lot_ids) < 2:
+        raise bad_request("lots_insuffisants")
+    lots = db.query(Lot).filter(Lot.id.in_(payload.lot_ids)).all()
+    if len(lots) != len(set(payload.lot_ids)):
+        raise bad_request("lot_introuvable")
+    for lot in lots:
+        if lot.current_owner_actor_id != current_actor.id:
+            raise bad_request("acces_refuse")
+        if lot.status != "available":
+            raise bad_request("lot_non_disponible")
+    total = sum([float(lot.quantity) for lot in lots])
+    parent = Lot(
+        filiere=lots[0].filiere,
+        product_type=payload.product_type,
+        unit=payload.unit,
+        quantity=total,
+        declared_by_actor_id=current_actor.id,
+        current_owner_actor_id=current_actor.id,
+        status="available",
+        declare_geo_point_id=payload.declare_geo_point_id,
+    )
+    db.add(parent)
+    db.flush()
+    for lot in lots:
+        lot.parent_lot_id = parent.id
+        lot.status = "consolidated"
+        db.add(
+            InventoryLedger(
+                actor_id=current_actor.id,
+                lot_id=lot.id,
+                movement_type="consolidate_out",
+                quantity_delta=-lot.quantity,
+                ref_event_type="consolidation",
+                ref_event_id=str(parent.id),
+            )
+        )
+    db.add(
+        InventoryLedger(
+            actor_id=current_actor.id,
+            lot_id=parent.id,
+            movement_type="consolidate_in",
+            quantity_delta=total,
+            ref_event_type="consolidation",
+            ref_event_id=str(parent.id),
+        )
+    )
+    write_audit(
+        db,
+        actor_id=current_actor.id,
+        action="lot_consolidated",
+        entity_type="lot",
+        entity_id=str(parent.id),
+        meta={"child_lot_ids": payload.lot_ids},
+    )
+    db.commit()
+    db.refresh(parent)
+    return LotOut(
+        id=parent.id,
+        filiere=parent.filiere,
+        product_type=parent.product_type,
+        unit=parent.unit,
+        quantity=float(parent.quantity),
+        declared_at=parent.declared_at,
+        declared_by_actor_id=parent.declared_by_actor_id,
+        current_owner_actor_id=parent.current_owner_actor_id,
+        status=parent.status,
+        declare_geo_point_id=parent.declare_geo_point_id,
+    )
+
+
+@router.post("/{lot_id}/split", response_model=list[LotOut])
+def split_lot(
+    lot_id: int,
+    payload: LotSplit,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    lot = db.query(Lot).filter_by(id=lot_id).first()
+    if not lot:
+        raise bad_request("lot_introuvable")
+    if lot.current_owner_actor_id != current_actor.id:
+        raise bad_request("acces_refuse")
+    if lot.status != "available":
+        raise bad_request("lot_non_disponible")
+    if not payload.quantities or sum(payload.quantities) != float(lot.quantity):
+        raise bad_request("quantites_invalides")
+    children = []
+    for qty in payload.quantities:
+        child = Lot(
+            filiere=lot.filiere,
+            product_type=lot.product_type,
+            unit=lot.unit,
+            quantity=qty,
+            declared_by_actor_id=current_actor.id,
+            current_owner_actor_id=current_actor.id,
+            status="available",
+            declare_geo_point_id=lot.declare_geo_point_id,
+            parent_lot_id=lot.id,
+        )
+        db.add(child)
+        db.flush()
+        children.append(child)
+        db.add(
+            InventoryLedger(
+                actor_id=current_actor.id,
+                lot_id=child.id,
+                movement_type="split_in",
+                quantity_delta=qty,
+                ref_event_type="split",
+                ref_event_id=str(lot.id),
+            )
+        )
+    lot.status = "split"
+    db.add(
+        InventoryLedger(
+            actor_id=current_actor.id,
+            lot_id=lot.id,
+            movement_type="split_out",
+            quantity_delta=-lot.quantity,
+            ref_event_type="split",
+            ref_event_id=str(lot.id),
+        )
+    )
+    write_audit(
+        db,
+        actor_id=current_actor.id,
+        action="lot_split",
+        entity_type="lot",
+        entity_id=str(lot.id),
+        meta={"child_lot_ids": [c.id for c in children]},
+    )
+    db.commit()
+    return [
+        LotOut(
+            id=child.id,
+            filiere=child.filiere,
+            product_type=child.product_type,
+            unit=child.unit,
+            quantity=float(child.quantity),
+            declared_at=child.declared_at,
+            declared_by_actor_id=child.declared_by_actor_id,
+            current_owner_actor_id=child.current_owner_actor_id,
+            status=child.status,
+            declare_geo_point_id=child.declare_geo_point_id,
+        )
+        for child in children
+    ]

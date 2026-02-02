@@ -159,3 +159,76 @@ def test_lot_create_and_transfer(client, db_session):
         json={"new_owner_actor_id": buyer.id, "payment_request_id": payment_request.id},
     )
     assert transfer.status_code == 200
+
+
+def test_lot_consolidate_and_split(client, db_session):
+    region, district, commune, version = _seed_territory(db_session)
+    owner = Actor(
+        type_personne="physique",
+        nom="Owner",
+        prenoms="Lot",
+        telephone="0340008003",
+        email="ownerlot@example.com",
+        status="active",
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        territory_version_id=version.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(owner)
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=owner.id, password_hash=hash_password("secret"), is_active=1))
+    geo = GeoPoint(lat=-18.91, lon=47.52, accuracy_m=12)
+    db_session.add(geo)
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": owner.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+
+    lot1 = client.post(
+        "/api/v1/lots",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "filiere": "OR",
+            "product_type": "or_brut",
+            "unit": "g",
+            "quantity": 5,
+            "declare_geo_point_id": geo.id,
+            "declared_by_actor_id": owner.id,
+        },
+    ).json()
+    lot2 = client.post(
+        "/api/v1/lots",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "filiere": "OR",
+            "product_type": "or_brut",
+            "unit": "g",
+            "quantity": 5,
+            "declare_geo_point_id": geo.id,
+            "declared_by_actor_id": owner.id,
+        },
+    ).json()
+
+    consolidated = client.post(
+        "/api/v1/lots/consolidate",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "lot_ids": [lot1["id"], lot2["id"]],
+            "product_type": "or_brut",
+            "unit": "g",
+            "declare_geo_point_id": geo.id,
+        },
+    )
+    assert consolidated.status_code == 201
+
+    split = client.post(
+        f"/api/v1/lots/{consolidated.json()['id']}/split",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"quantities": [4, 6]},
+    )
+    assert split.status_code == 200

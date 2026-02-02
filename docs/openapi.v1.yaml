@@ -349,8 +349,7 @@ paths:
   /lots:
     post:
       tags: [lots]
-      summary: Declare lot
-      x-implementation-status: planned
+      summary: Create lot
       requestBody:
         required: true
         content:
@@ -363,18 +362,57 @@ paths:
     get:
       tags: [lots]
       summary: List lots
-      x-implementation-status: planned
       responses:
         "200":
           description: OK
   /lots/{lot_id}/transfer:
     post:
       tags: [lots]
-      summary: Initiate transfer
-      x-implementation-status: planned
+      summary: Transfer lot
       responses:
         "200":
           description: OK
+  /lots/consolidate:
+    post:
+      tags: [lots]
+      summary: Consolidate lots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/LotConsolidate
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/Lot
+  /lots/{lot_id}/split:
+    post:
+      tags: [lots]
+      summary: Split lot
+      parameters:
+        - in: path
+          name: lot_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/LotSplit
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/Lot
   /documents/{document_id}:
     get:
       tags: [documents]
@@ -1062,3 +1100,20 @@ components:
         new_owner_actor_id: { type: integer }
         payment_request_id: { type: integer }
       required: [new_owner_actor_id, payment_request_id]
+    LotConsolidate:
+      type: object
+      properties:
+        lot_ids:
+          type: array
+          items: { type: integer }
+        product_type: { type: string }
+        unit: { type: string }
+        declare_geo_point_id: { type: integer }
+      required: [lot_ids, product_type, unit, declare_geo_point_id]
+    LotSplit:
+      type: object
+      properties:
+        quantities:
+          type: array
+          items: { type: number }
+      required: [quantities]

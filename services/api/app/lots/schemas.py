@@ -28,3 +28,14 @@ class LotOut(BaseModel):
 class LotTransfer(BaseModel):
     new_owner_actor_id: int
     payment_request_id: int
+
+
+class LotConsolidate(BaseModel):
+    lot_ids: list[int]
+    product_type: str
+    unit: str
+    declare_geo_point_id: int
+
+
+class LotSplit(BaseModel):
+    quantities: list[float]
