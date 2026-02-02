@@ -22,3 +22,24 @@ class PaymentInitiateResponse(BaseModel):
 class WebhookPayload(BaseModel):
     external_ref: str
     status: str
+
+
+class PaymentProviderCreate(BaseModel):
+    code: str
+    name: str
+    enabled: bool = False
+    config_json: str | None = None
+
+
+class PaymentProviderUpdate(BaseModel):
+    name: str | None = None
+    enabled: bool | None = None
+    config_json: str | None = None
+
+
+class PaymentProviderOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    enabled: bool
+    config_json: str | None = None

@@ -374,6 +374,108 @@ paths:
                 type: array
                 items:
                   $ref: #/components/schemas/Fee
+  /payments/providers:
+    post:
+      tags: [payments]
+      summary: Create payment provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/PaymentProviderCreate
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/PaymentProvider
+    get:
+      tags: [payments]
+      summary: List payment providers
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/PaymentProvider
+  /payments/providers/{provider_id}:
+    patch:
+      tags: [payments]
+      summary: Update payment provider
+      parameters:
+        - in: path
+          name: provider_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/PaymentProviderUpdate
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/PaymentProvider
+  /payment-providers:
+    post:
+      tags: [payments]
+      summary: Create payment provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/PaymentProviderCreate
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/PaymentProvider
+    get:
+      tags: [payments]
+      summary: List payment providers
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/PaymentProvider
+  /payment-providers/{provider_id}:
+    patch:
+      tags: [payments]
+      summary: Update payment provider
+      parameters:
+        - in: path
+          name: provider_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/PaymentProviderUpdate
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/PaymentProvider
   /payments/status/{external_ref}:
     get:
       tags: [payments]
@@ -590,3 +692,25 @@ components:
         amount: { type: number }
         currency: { type: string }
         status: { type: string }
+    PaymentProviderCreate:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        config_json: { type: string }
+      required: [code, name]
+    PaymentProviderUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        enabled: { type: boolean }
+        config_json: { type: string }
+    PaymentProvider:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        config_json: { type: string }

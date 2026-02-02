@@ -12,11 +12,84 @@ from app.db import get_db
 from app.audit.logger import write_audit
 from app.models.actor import Actor
 from app.models.fee import Fee
+from app.auth.dependencies import require_roles
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
+from app.payments.providers_schemas import ProviderCreate, ProviderOut, ProviderUpdate
 from app.payments.schemas import PaymentInitiate, PaymentInitiateResponse, WebhookPayload
 
 router = APIRouter(prefix=f"{settings.api_prefix}/payments", tags=["payments"])
 
+
+@router.post("/providers", response_model=ProviderOut, status_code=201)
+def create_provider(
+    payload: ProviderCreate,
+    db: Session = Depends(get_db),
+    _actor=Depends(require_roles({"admin"})),
+):
+    existing = db.query(PaymentProvider).filter_by(code=payload.code).first()
+    if existing:
+        raise bad_request("provider_existe")
+    provider = PaymentProvider(
+        code=payload.code,
+        name=payload.name,
+        enabled=payload.enabled,
+        config_json=payload.config_json,
+    )
+    db.add(provider)
+    db.commit()
+    db.refresh(provider)
+    return ProviderOut(
+        id=provider.id,
+        code=provider.code,
+        name=provider.name,
+        enabled=provider.enabled,
+        config_json=provider.config_json,
+    )
+
+
+@router.get("/providers", response_model=list[ProviderOut])
+def list_providers(
+    db: Session = Depends(get_db),
+    _actor=Depends(require_roles({"admin"})),
+):
+    providers = db.query(PaymentProvider).order_by(PaymentProvider.code.asc()).all()
+    return [
+        ProviderOut(
+            id=p.id,
+            code=p.code,
+            name=p.name,
+            enabled=p.enabled,
+            config_json=p.config_json,
+        )
+        for p in providers
+    ]
+
+
+@router.patch("/providers/{provider_id}", response_model=ProviderOut)
+def update_provider(
+    provider_id: int,
+    payload: ProviderUpdate,
+    db: Session = Depends(get_db),
+    _actor=Depends(require_roles({"admin"})),
+):
+    provider = db.query(PaymentProvider).filter_by(id=provider_id).first()
+    if not provider:
+        raise bad_request("provider_inconnu")
+    if payload.name is not None:
+        provider.name = payload.name
+    if payload.enabled is not None:
+        provider.enabled = payload.enabled
+    if payload.config_json is not None:
+        provider.config_json = payload.config_json
+    db.commit()
+    db.refresh(provider)
+    return ProviderOut(
+        id=provider.id,
+        code=provider.code,
+        name=provider.name,
+        enabled=provider.enabled,
+        config_json=provider.config_json,
+    )
 
 @router.post("/initiate", response_model=PaymentInitiateResponse, status_code=201)
 def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
