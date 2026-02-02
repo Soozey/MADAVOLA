@@ -108,6 +108,29 @@ def list_documents(
     ]
 
 
+@router.get("/{document_id}", response_model=DocumentOut)
+def get_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    document = db.query(Document).filter_by(id=document_id).first()
+    if not document:
+        raise bad_request("document_introuvable")
+    if not _is_admin(db, current_actor.id) and document.owner_actor_id != current_actor.id:
+        raise bad_request("acces_refuse")
+    return DocumentOut(
+        id=document.id,
+        doc_type=document.doc_type,
+        owner_actor_id=document.owner_actor_id,
+        related_entity_type=document.related_entity_type,
+        related_entity_id=document.related_entity_id,
+        storage_path=document.storage_path,
+        original_filename=document.original_filename,
+        sha256=document.sha256,
+    )
+
+
 def _is_admin(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)

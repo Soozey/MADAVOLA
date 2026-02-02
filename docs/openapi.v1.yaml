@@ -312,6 +312,22 @@ paths:
       responses:
         "200":
           description: OK
+  /documents/{document_id}:
+    get:
+      tags: [documents]
+      summary: Get document
+      parameters:
+        - in: path
+          name: document_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/Document
   /transactions:
     get:
       tags: [transactions]

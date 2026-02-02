@@ -140,3 +140,61 @@ def test_documents_rbac(client, db_session):
     )
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_get_document_rbac(client, db_session):
+    from app.auth.security import hash_password
+    from app.models.actor import ActorAuth
+
+    region, district, commune, version = _seed_territory(db_session)
+    owner = Actor(
+        type_personne="physique",
+        nom="DocOwner2",
+        prenoms="Owner",
+        telephone="0340003007",
+        email="owner2@example.com",
+        status="active",
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        territory_version_id=version.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    other = Actor(
+        type_personne="physique",
+        nom="DocOther2",
+        prenoms="Other",
+        telephone="0340003008",
+        email="other2@example.com",
+        status="active",
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        territory_version_id=version.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add_all([owner, other])
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
+    doc = Document(
+        doc_type="facture",
+        owner_actor_id=owner.id,
+        related_entity_type="invoice",
+        related_entity_id="INV-0003",
+        storage_path="data/uploads/INV-0003.json",
+        original_filename="INV-0003.json",
+        sha256="y" * 64,
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": other.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    denied = client.get(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert denied.status_code == 400
