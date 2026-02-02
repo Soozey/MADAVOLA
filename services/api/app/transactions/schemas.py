@@ -21,3 +21,16 @@ class TransactionOut(BaseModel):
     status: str
     total_amount: float
     currency: str
+
+
+class TransactionPaymentInitiate(BaseModel):
+    provider_code: str
+    external_ref: str | None = None
+    idempotency_key: str | None = None
+
+
+class TransactionPaymentOut(BaseModel):
+    payment_request_id: int
+    payment_id: int
+    status: str
+    external_ref: str

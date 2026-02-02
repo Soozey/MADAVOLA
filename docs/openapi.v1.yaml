@@ -320,6 +320,28 @@ paths:
       responses:
         "201":
           description: Created
+  /transactions/{transaction_id}/initiate-payment:
+    post:
+      tags: [transactions]
+      summary: Initiate payment for transaction
+      parameters:
+        - in: path
+          name: transaction_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/TransactionPaymentInitiate
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/TransactionPayment
   /payments/initiate:
     post:
       tags: [payments]
@@ -764,3 +786,17 @@ components:
         buyer_actor_id: { type: integer }
         total_amount: { type: number }
         status: { type: string }
+    TransactionPaymentInitiate:
+      type: object
+      properties:
+        provider_code: { type: string }
+        external_ref: { type: string }
+        idempotency_key: { type: string }
+      required: [provider_code]
+    TransactionPayment:
+      type: object
+      properties:
+        payment_request_id: { type: integer }
+        payment_id: { type: integer }
+        status: { type: string }
+        external_ref: { type: string }

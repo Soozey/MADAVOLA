@@ -87,3 +87,35 @@ def test_create_transaction(client, db_session):
     assert response.status_code == 201
     payload = response.json()
     assert payload["total_amount"] == 2500.0
+
+
+def test_initiate_transaction_payment(client, db_session):
+    from app.models.payment import PaymentProvider
+
+    region, district, commune, version = _seed_territory(db_session)
+    seller = _create_actor(
+        db_session, "seller2@example.com", "0340002000", region.id, district.id, commune.id, version.id
+    )
+    buyer = _create_actor(
+        db_session, "buyer2@example.com", "0340002001", region.id, district.id, commune.id, version.id
+    )
+    provider = PaymentProvider(code="mvola", name="mVola", enabled=True)
+    db_session.add(provider)
+    db_session.commit()
+
+    transaction = client.post(
+        "/api/v1/transactions",
+        json={
+            "seller_actor_id": seller.id,
+            "buyer_actor_id": buyer.id,
+            "currency": "MGA",
+            "items": [{"lot_id": None, "quantity": 1, "unit_price": 1000}],
+        },
+    ).json()
+
+    response = client.post(
+        f"/api/v1/transactions/{transaction['id']}/initiate-payment",
+        json={"provider_code": "mvola"},
+    )
+    assert response.status_code == 201
+    assert response.json()["status"] == "pending"
