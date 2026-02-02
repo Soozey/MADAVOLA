@@ -93,3 +93,19 @@
 - actor_id (FK actors, nullable)
 - action, entity_type, entity_id
 - justification, meta_json, created_at
+
+### trade_transactions
+- id (PK)
+- seller_actor_id (FK actors), buyer_actor_id (FK actors)
+- status, total_amount, currency, created_at
+
+### trade_transaction_items
+- id (PK), transaction_id (FK trade_transactions)
+- lot_id (nullable), quantity, unit_price, line_amount
+
+### invoices
+- id (PK)
+- invoice_number (unique)
+- transaction_id (FK trade_transactions)
+- seller_actor_id (FK actors), buyer_actor_id (FK actors)
+- issue_date, total_amount, status
