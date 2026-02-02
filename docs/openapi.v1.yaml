@@ -513,3 +513,27 @@ components:
         captured_at: { type: string, format: date-time }
         source: { type: string }
         device_id: { type: string }
+    PaymentInitiate:
+      type: object
+      properties:
+        provider_code: { type: string }
+        payer_actor_id: { type: integer }
+        payee_actor_id: { type: integer }
+        amount: { type: number }
+        currency: { type: string }
+        external_ref: { type: string }
+        idempotency_key: { type: string }
+      required: [provider_code, payer_actor_id, payee_actor_id, amount, currency]
+    PaymentInitiateResponse:
+      type: object
+      properties:
+        payment_request_id: { type: integer }
+        payment_id: { type: integer }
+        status: { type: string }
+        external_ref: { type: string }
+    PaymentWebhook:
+      type: object
+      properties:
+        external_ref: { type: string }
+        status: { type: string }
+      required: [external_ref, status]

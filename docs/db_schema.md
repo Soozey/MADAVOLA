@@ -59,3 +59,26 @@
 - lat, lon, accuracy_m
 - captured_at, source, device_id
 - actor_id (FK actors, nullable)
+
+### payment_providers
+- id (PK)
+- code (unique), name, enabled
+- config_json
+
+### payment_requests
+- id (PK)
+- provider_id (FK payment_providers)
+- payer_actor_id (FK actors), payee_actor_id (FK actors)
+- amount, currency, status, external_ref (unique), idempotency_key
+- created_at
+
+### payments
+- id (PK)
+- payment_request_id (FK payment_requests)
+- status, operator_ref, confirmed_at
+
+### webhook_inbox
+- id (PK)
+- provider_id (FK payment_providers)
+- external_ref (unique per provider)
+- received_at, payload_hash, status
