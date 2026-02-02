@@ -98,6 +98,34 @@ def list_fees(
     ]
 
 
+@router.get("/{fee_id}", response_model=FeeOut)
+def get_fee(
+    fee_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    fee = db.query(Fee).filter_by(id=fee_id).first()
+    if not fee:
+        raise bad_request("frais_introuvable")
+    if _is_admin(db, current_actor.id):
+        pass
+    elif _is_commune_agent(db, current_actor.id):
+        if fee.commune_id != current_actor.commune_id:
+            raise bad_request("acces_refuse")
+    else:
+        if fee.actor_id != current_actor.id:
+            raise bad_request("acces_refuse")
+    return FeeOut(
+        id=fee.id,
+        fee_type=fee.fee_type,
+        actor_id=fee.actor_id,
+        commune_id=fee.commune_id,
+        amount=float(fee.amount),
+        currency=fee.currency,
+        status=fee.status,
+    )
+
+
 def _is_admin(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)

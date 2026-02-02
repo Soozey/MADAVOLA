@@ -425,6 +425,23 @@ paths:
         "200":
           description: OK
   /fees:
+  /fees/{fee_id}:
+    get:
+      tags: [fees]
+      summary: Get fee
+      parameters:
+        - in: path
+          name: fee_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/Fee
+
     post:
       tags: [fees]
       summary: Create fee

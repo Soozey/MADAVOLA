@@ -158,3 +158,59 @@ def test_fee_list_rbac(client, db_session):
     )
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_fee_get_rbac(client, db_session):
+    import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
+
+    owner = Actor(
+        type_personne="physique",
+        nom="Owner2",
+        prenoms="Fee",
+        telephone="0340000300",
+        email="owner2fee@example.com",
+        status="active",
+        region_id=1,
+        district_id=1,
+        commune_id=1,
+        territory_version_id=1,
+        created_at=datetime.now(timezone.utc),
+    )
+    other = Actor(
+        type_personne="physique",
+        nom="Other2",
+        prenoms="Fee",
+        telephone="0340000301",
+        email="other2fee@example.com",
+        status="active",
+        region_id=1,
+        district_id=1,
+        commune_id=1,
+        territory_version_id=1,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add_all([owner, other])
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
+    fee = Fee(
+        fee_type="account_opening_commune",
+        actor_id=owner.id,
+        commune_id=1,
+        amount=10000,
+        currency="MGA",
+        status="pending",
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(fee)
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": other.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    denied = client.get(
+        f"/api/v1/fees/{fee.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert denied.status_code == 400
