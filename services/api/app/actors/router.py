@@ -114,4 +114,8 @@ def create_actor(payload: ActorCreate, db: Session = Depends(get_db)):
         telephone=actor.telephone,
         email=actor.email,
         status=actor.status,
+        region_code=region.code,
+        district_code=district.code,
+        commune_code=commune.code,
+        fokontany_code=fokontany.code if fokontany else None,
     )

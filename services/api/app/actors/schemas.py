@@ -28,3 +28,7 @@ class ActorOut(BaseModel):
     telephone: str
     email: str | None = None
     status: str
+    region_code: str
+    district_code: str
+    commune_code: str
+    fokontany_code: str | None = None
