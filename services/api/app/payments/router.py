@@ -11,7 +11,8 @@ from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
 from app.audit.logger import write_audit
-from app.models.actor import Actor
+from app.auth.dependencies import get_current_actor
+from app.models.actor import Actor, ActorRole
 from app.models.fee import Fee
 from app.auth.dependencies import require_roles
 from app.models.invoice import Invoice
@@ -96,7 +97,11 @@ def update_provider(
     )
 
 @router.post("/initiate", response_model=PaymentInitiateResponse, status_code=201)
-def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
+def initiate_payment(
+    payload: PaymentInitiate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
     provider = db.query(PaymentProvider).filter_by(code=payload.provider_code).first()
     if not provider or not provider.enabled:
         raise bad_request("provider_indisponible")
@@ -105,11 +110,15 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
     payee = db.query(Actor).filter_by(id=payload.payee_actor_id).first()
     if not payer or not payee:
         raise bad_request("acteur_invalide")
+    if not _is_admin(db, current_actor.id) and payload.payer_actor_id != current_actor.id:
+        raise bad_request("acces_refuse")
 
     fee = None
     if payload.fee_id:
         fee = db.query(Fee).filter_by(id=payload.fee_id).first()
         if not fee or fee.status != "pending":
+            raise bad_request("frais_invalide")
+        if fee.actor_id != payload.payer_actor_id:
             raise bad_request("frais_invalide")
 
     transaction = None
@@ -118,6 +127,8 @@ def initiate_payment(payload: PaymentInitiate, db: Session = Depends(get_db)):
             db.query(TradeTransaction).filter_by(id=payload.transaction_id).first()
         )
         if not transaction or transaction.status != "pending_payment":
+            raise bad_request("transaction_invalide")
+        if transaction.buyer_actor_id != payload.payer_actor_id:
             raise bad_request("transaction_invalide")
 
     if payload.external_ref:
@@ -286,3 +297,12 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
 
     db.commit()
     return {"status": "ok", "idempotent": False}
+
+
+def _is_admin(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
+    )

@@ -100,8 +100,15 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     db_session.add(transaction)
     db_session.commit()
 
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": payer.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+
     response = client.post(
         "/api/v1/payments/initiate",
+        headers={"Authorization": f"Bearer {token}"},
         json={
             "provider_code": "mvola",
             "payer_actor_id": payer.id,
