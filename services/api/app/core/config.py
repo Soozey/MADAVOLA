@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     access_token_exp_minutes: int = 60
     refresh_token_exp_days: int = 14
     document_storage_dir: str = "data/uploads"
+    webhook_shared_secret: str | None = None
+    webhook_ip_allowlist: str | None = None
 
 
 settings = Settings()

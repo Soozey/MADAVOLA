@@ -186,6 +186,17 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
     if not provider:
         raise bad_request("provider_inconnu")
 
+    if settings.webhook_shared_secret:
+        secret = request.headers.get("X-Webhook-Secret")
+        if secret != settings.webhook_shared_secret:
+            raise bad_request("webhook_non_autorise")
+
+    if settings.webhook_ip_allowlist:
+        allowed = {ip.strip() for ip in settings.webhook_ip_allowlist.split(",") if ip.strip()}
+        client_ip = request.client.host if request.client else ""
+        if allowed and client_ip not in allowed:
+            raise bad_request("webhook_non_autorise")
+
     payload = await request.json()
     try:
         parsed = WebhookPayload(**payload)
