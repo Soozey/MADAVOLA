@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor, require_roles
-from app.auth.dependencies import get_current_actor
+from app.auth.dependencies import get_current_actor, get_optional_actor
 from app.auth.security import hash_password
 from app.common.errors import bad_request
 from app.core.config import settings
@@ -19,7 +19,11 @@ router = APIRouter(prefix=f"{settings.api_prefix}/actors", tags=["actors"])
 
 
 @router.post("", response_model=ActorOut, status_code=201)
-def create_actor(payload: ActorCreate, db: Session = Depends(get_db)):
+def create_actor(
+    payload: ActorCreate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_optional_actor),
+):
     active_version = db.query(TerritoryVersion).filter_by(status="active").first()
     if not active_version:
         raise bad_request("territoire_non_charge")
@@ -67,6 +71,11 @@ def create_actor(payload: ActorCreate, db: Session = Depends(get_db)):
 
     if not region or not district or not commune:
         raise bad_request("territoire_invalide")
+    if current_actor:
+        if not _is_admin(db, current_actor.id) and not _is_commune_agent(db, current_actor.id):
+            raise bad_request("acces_refuse")
+        if _is_commune_agent(db, current_actor.id) and current_actor.commune_id != commune.id:
+            raise bad_request("acces_refuse")
 
     geo_point = db.query(GeoPoint).filter_by(id=payload.geo_point_id).first()
     if not geo_point:
@@ -231,6 +240,15 @@ def _is_admin(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)
         .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
+    )
+
+
+def _is_commune_agent(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role == "commune_agent")
         .first()
         is not None
     )

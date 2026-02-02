@@ -119,3 +119,61 @@ def test_get_actor_rbac(client, db_session):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert denied.status_code == 400
+
+
+def test_create_actor_rbac_commune_agent(client, db_session):
+    import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
+    agent = _create_actor(db_session, "010101", "commune_agent", "agent2")
+    from app.models.geo import GeoPoint
+
+    geo = GeoPoint(
+        lat=-18.91,
+        lon=47.52,
+        accuracy_m=12,
+    )
+    db_session.add(geo)
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": agent.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+
+    ok = client.post(
+        "/api/v1/actors",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "type_personne": "physique",
+            "nom": "Rakoto",
+            "prenoms": "Jean",
+            "telephone": "0340007001",
+            "password": "secret",
+            "region_code": "01",
+            "district_code": "0101",
+            "commune_code": "010101",
+            "fokontany_code": "010101-001",
+            "geo_point_id": geo.id,
+            "roles": ["orpailleur"],
+        },
+    )
+    assert ok.status_code == 201
+
+    denied = client.post(
+        "/api/v1/actors",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "type_personne": "physique",
+            "nom": "Rakoto",
+            "prenoms": "Jean",
+            "telephone": "0340007002",
+            "password": "secret",
+            "region_code": "01",
+            "district_code": "0101",
+            "commune_code": "010102",
+            "fokontany_code": "010102-001",
+            "geo_point_id": geo.id,
+            "roles": ["orpailleur"],
+        },
+    )
+    assert denied.status_code == 400

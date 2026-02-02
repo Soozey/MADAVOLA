@@ -28,6 +28,22 @@ def get_current_actor(
     return actor
 
 
+def get_optional_actor(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> Actor | None:
+    if not credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+    except Exception:
+        raise bad_request("token_invalide")
+    actor = db.query(Actor).filter_by(id=int(payload["sub"])).first()
+    if not actor or actor.status != "active":
+        raise bad_request("compte_inactif")
+    return actor
+
+
 def require_roles(roles: set[str]):
     def _checker(
         actor: Actor = Depends(get_current_actor), db: Session = Depends(get_db)
