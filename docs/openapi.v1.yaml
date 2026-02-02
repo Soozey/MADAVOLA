@@ -434,36 +434,6 @@ paths:
                 type: array
                 items:
                   $ref: #/components/schemas/Fee
-  /payments/providers:
-    post:
-      tags: [payments]
-      summary: Create payment provider
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: #/components/schemas/PaymentProviderCreate
-      responses:
-        201:
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: #/components/schemas/PaymentProvider
-    get:
-      tags: [payments]
-      summary: List payment providers
-      responses:
-        200:
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: #/components/schemas/PaymentProvider
-  /payments/providers/{provider_id}:
     patch:
       tags: [payments]
       summary: Update payment provider
