@@ -283,6 +283,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GeoPoint"
+  /geo-points/{geo_point_id}:
+    get:
+      tags: [geo]
+      summary: Get geo point
+      parameters:
+        - in: path
+          name: geo_point_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/GeoPoint
   /lots:
     post:
       tags: [lots]

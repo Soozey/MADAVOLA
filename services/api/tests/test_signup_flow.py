@@ -67,6 +67,44 @@ def test_signup_requires_geo_and_valid_territory(client, db_session):
     assert payload["status"] == "pending"
 
 
+def test_get_geo_point_rbac(client, db_session):
+    import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
+
+    geo = client.post(
+        "/api/v1/geo-points",
+        json={"lat": -18.91, "lon": 47.52, "accuracy_m": 12, "source": "gps"},
+    ).json()
+
+    actor = client.post(
+        "/api/v1/actors",
+        json={
+            "type_personne": "physique",
+            "nom": "Rakoto",
+            "prenoms": "Jean",
+            "telephone": "0340000009",
+            "password": "secret",
+            "region_code": "01",
+            "district_code": "0101",
+            "commune_code": "010101",
+            "fokontany_code": "010101-001",
+            "geo_point_id": geo["id"],
+            "roles": ["orpailleur"],
+        },
+    ).json()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "0340000009", "password": "secret"},
+    )
+    token = login.json()["access_token"]
+
+    ok = client.get(
+        f"/api/v1/geo-points/{geo['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert ok.status_code == 200
+
+
 def test_signup_rejects_invalid_geo(client, db_session):
     import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
 
