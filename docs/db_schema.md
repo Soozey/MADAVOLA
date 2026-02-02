@@ -36,8 +36,10 @@
 
 ### actors
 - id (PK)
-- type_personne, nom, prenoms
+- type_personne, nom, prenoms, cin, nif, stat, rccm
 - telephone (unique), email (unique)
+- region_id (FK regions), district_id (FK districts), commune_id (FK communes), fokontany_id (FK fokontany)
+- territory_version_id (FK territory_versions), signup_geo_point_id (FK geo_points)
 - status, created_at
 
 ### actor_roles
@@ -51,3 +53,9 @@
 ### refresh_tokens
 - id (PK), actor_id (FK actors)
 - token_id (unique), expires_at, revoked_at
+
+### geo_points
+- id (PK)
+- lat, lon, accuracy_m
+- captured_at, source, device_id
+- actor_id (FK actors, nullable)

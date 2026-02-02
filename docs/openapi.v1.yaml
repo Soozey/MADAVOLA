@@ -8,6 +8,7 @@ servers:
 tags:
   - name: auth
   - name: actors
+  - name: geo
   - name: territories
   - name: lots
   - name: transactions
@@ -264,6 +265,23 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Fokontany"
+  /geo-points:
+    post:
+      tags: [geo]
+      summary: Create geo point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeoPointCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoPoint"
   /lots:
     post:
       tags: [lots]
@@ -392,6 +410,7 @@ components:
         cin: { type: string }
         nif: { type: string }
         stat: { type: string }
+        rccm: { type: string }
         telephone: { type: string }
         email: { type: string }
         region_code: { type: string }
@@ -406,12 +425,20 @@ components:
         nom: { type: string }
         prenoms: { type: string }
         cin: { type: string }
+        nif: { type: string }
+        stat: { type: string }
+        rccm: { type: string }
         telephone: { type: string }
+        password: { type: string }
         region_code: { type: string }
         district_code: { type: string }
         commune_code: { type: string }
         fokontany_code: { type: string }
-      required: [type_personne, nom, cin, telephone, commune_code]
+        geo_point_id: { type: integer }
+        roles:
+          type: array
+          items: { type: string }
+      required: [type_personne, nom, telephone, password, commune_code, geo_point_id, roles]
     ActorUpdate:
       type: object
       properties:
@@ -466,3 +493,23 @@ components:
         unit: { type: string }
         quantity: { type: number }
         geo_point_id: { type: string }
+    GeoPointCreate:
+      type: object
+      properties:
+        lat: { type: number }
+        lon: { type: number }
+        accuracy_m: { type: integer }
+        captured_at: { type: string, format: date-time }
+        source: { type: string }
+        device_id: { type: string }
+      required: [lat, lon, accuracy_m]
+    GeoPoint:
+      type: object
+      properties:
+        id: { type: integer }
+        lat: { type: number }
+        lon: { type: number }
+        accuracy_m: { type: integer }
+        captured_at: { type: string, format: date-time }
+        source: { type: string }
+        device_id: { type: string }

@@ -13,13 +13,24 @@ class Actor(Base):
     type_personne = Column(String(20), nullable=False)
     nom = Column(String(150), nullable=False)
     prenoms = Column(String(150))
+    cin = Column(String(50))
+    nif = Column(String(50))
+    stat = Column(String(50))
+    rccm = Column(String(50))
     telephone = Column(String(30), unique=True)
     email = Column(String(255), unique=True)
+    region_id = Column(Integer, ForeignKey("regions.id"), nullable=False)
+    district_id = Column(Integer, ForeignKey("districts.id"), nullable=False)
+    commune_id = Column(Integer, ForeignKey("communes.id"), nullable=False)
+    fokontany_id = Column(Integer, ForeignKey("fokontany.id"))
+    territory_version_id = Column(Integer, ForeignKey("territory_versions.id"), nullable=False)
+    signup_geo_point_id = Column(Integer, ForeignKey("geo_points.id"), nullable=True)
     status = Column(String(20), nullable=False, default="pending")
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     roles = relationship("ActorRole", back_populates="actor")
     auth = relationship("ActorAuth", back_populates="actor", uselist=False)
+    geo_points = relationship("GeoPoint", back_populates="actor")
 
 
 class ActorRole(Base):
