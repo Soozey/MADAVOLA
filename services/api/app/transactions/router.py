@@ -164,10 +164,14 @@ def initiate_transaction_payment(
     transaction_id: int,
     payload: TransactionPaymentInitiate,
     db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
 ):
     transaction = db.query(TradeTransaction).filter_by(id=transaction_id).first()
     if not transaction or transaction.status != "pending_payment":
         raise bad_request("transaction_invalide")
+    if not _is_admin(db, current_actor.id):
+        if current_actor.id not in (transaction.seller_actor_id, transaction.buyer_actor_id):
+            raise bad_request("acces_refuse")
 
     provider = db.query(PaymentProvider).filter_by(code=payload.provider_code).first()
     if not provider or not provider.enabled:

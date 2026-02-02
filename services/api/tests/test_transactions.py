@@ -117,6 +117,19 @@ def test_initiate_transaction_payment(client, db_session):
         f"/api/v1/transactions/{transaction['id']}/initiate-payment",
         json={"provider_code": "mvola"},
     )
+    assert response.status_code == 400
+    assert response.json()["detail"]["message"] == "token_manquant"
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": buyer.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    response = client.post(
+        f"/api/v1/transactions/{transaction['id']}/initiate-payment",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"provider_code": "mvola"},
+    )
     assert response.status_code == 201
     assert response.json()["status"] == "pending"
 
