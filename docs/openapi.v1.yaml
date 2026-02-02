@@ -1033,3 +1033,32 @@ components:
         justification: { type: string }
         meta_json: { type: string }
         created_at: { type: string, format: date-time }
+    Lot:
+      type: object
+      properties:
+        id: { type: integer }
+        filiere: { type: string }
+        product_type: { type: string }
+        unit: { type: string }
+        quantity: { type: number }
+        declared_at: { type: string, format: date-time }
+        declared_by_actor_id: { type: integer }
+        current_owner_actor_id: { type: integer }
+        status: { type: string }
+        declare_geo_point_id: { type: integer }
+    LotCreate:
+      type: object
+      properties:
+        filiere: { type: string }
+        product_type: { type: string }
+        unit: { type: string }
+        quantity: { type: number }
+        declare_geo_point_id: { type: integer }
+        declared_by_actor_id: { type: integer }
+      required: [product_type, unit, quantity, declare_geo_point_id, declared_by_actor_id]
+    LotTransfer:
+      type: object
+      properties:
+        new_owner_actor_id: { type: integer }
+        payment_request_id: { type: integer }
+      required: [new_owner_actor_id, payment_request_id]

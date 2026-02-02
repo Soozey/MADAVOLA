@@ -4,6 +4,7 @@ from app.models import document  # noqa: F401
 from app.models import fee  # noqa: F401
 from app.models import geo  # noqa: F401
 from app.models import invoice  # noqa: F401
+from app.models import lot  # noqa: F401
 from app.models import payment  # noqa: F401
 from app.models import territory  # noqa: F401
 from app.models import transaction  # noqa: F401

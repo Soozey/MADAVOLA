@@ -117,3 +117,22 @@
 - related_entity_type, related_entity_id
 - storage_path, original_filename, sha256
 - created_at
+
+### lots
+- id (PK)
+- filiere, product_type, unit, quantity
+- declared_at, declared_by_actor_id (FK actors)
+- current_owner_actor_id (FK actors)
+- status, declare_geo_point_id (FK geo_points)
+- parent_lot_id (FK lots, nullable)
+
+### lot_links
+- id (PK)
+- parent_lot_id (FK lots), child_lot_id (FK lots)
+- relation_type, quantity_from_child
+
+### inventory_ledger
+- id (PK)
+- actor_id (FK actors), lot_id (FK lots)
+- movement_type, quantity_delta
+- ref_event_type, ref_event_id, created_at
