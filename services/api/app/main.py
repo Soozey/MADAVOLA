@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.actors.router import router as actors_router
+from app.audit.router import router as audit_router
 from app.auth.router import router as auth_router
 from app.documents.router import router as documents_router
 from app.fees.router import router as fees_router
@@ -16,6 +17,7 @@ from app.transactions.router import router as transactions_router
 def create_app() -> FastAPI:
     app = FastAPI(title="MADAVOLA API", version="v1")
     app.include_router(auth_router)
+    app.include_router(audit_router)
     app.include_router(documents_router)
     app.include_router(actors_router)
     app.include_router(fees_router)

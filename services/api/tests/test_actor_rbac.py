@@ -177,3 +177,20 @@ def test_create_actor_rbac_commune_agent(client, db_session):
         },
     )
     assert denied.status_code == 400
+
+
+def test_get_actor_roles(client, db_session):
+    import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
+    actor = _create_actor(db_session, "010101", "orpailleur", "orp5")
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": actor.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    response = client.get(
+        f"/api/v1/actors/{actor.id}/roles",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert "roles" in response.json()

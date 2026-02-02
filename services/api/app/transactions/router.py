@@ -213,3 +213,36 @@ def initiate_transaction_payment(
         status=request.status,
         external_ref=request.external_ref,
     )
+
+
+@router.get("/{transaction_id}/payments", response_model=list[TransactionPaymentOut])
+def list_transaction_payments(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    transaction = db.query(TradeTransaction).filter_by(id=transaction_id).first()
+    if not transaction:
+        raise bad_request("transaction_introuvable")
+    if not _is_admin(db, current_actor.id):
+        if current_actor.id not in (transaction.seller_actor_id, transaction.buyer_actor_id):
+            raise bad_request("acces_refuse")
+    payments = (
+        db.query(PaymentRequest)
+        .filter(PaymentRequest.transaction_id == transaction.id)
+        .order_by(PaymentRequest.created_at.desc())
+        .all()
+    )
+    payment_map = {
+        p.payment_request_id: p.id
+        for p in db.query(Payment).filter(Payment.payment_request_id.in_([r.id for r in payments])).all()
+    } if payments else {}
+    return [
+        TransactionPaymentOut(
+            payment_request_id=p.id,
+            payment_id=payment_map.get(p.id, 0),
+            status=p.status,
+            external_ref=p.external_ref,
+        )
+        for p in payments
+    ]

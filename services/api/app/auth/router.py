@@ -93,6 +93,15 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.get("/me")
 def me(actor: Actor = Depends(get_current_actor)):
+    roles = [
+        role.role
+        for role in actor.roles
+        if role.status == "active"
+    ]
+    region = actor.region_id and actor.region_id
+    district = actor.district_id and actor.district_id
+    commune = actor.commune_id and actor.commune_id
+    fokontany = actor.fokontany_id and actor.fokontany_id
     return {
         "id": actor.id,
         "type_personne": actor.type_personne,
@@ -101,4 +110,9 @@ def me(actor: Actor = Depends(get_current_actor)):
         "telephone": actor.telephone,
         "email": actor.email,
         "status": actor.status,
+        "roles": roles,
+        "region_id": region,
+        "district_id": district,
+        "commune_id": commune,
+        "fokontany_id": fokontany,
     }

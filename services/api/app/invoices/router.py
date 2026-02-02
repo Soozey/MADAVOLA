@@ -14,10 +14,14 @@ router = APIRouter(prefix=f"{settings.api_prefix}/invoices", tags=["documents"])
 
 @router.get("", response_model=list[InvoiceOut])
 def list_invoices(
+    transaction_id: int | None = None,
     db: Session = Depends(get_db),
     current_actor=Depends(get_current_actor),
 ):
-    invoices = db.query(Invoice).order_by(Invoice.issue_date.desc()).all()
+    query = db.query(Invoice)
+    if transaction_id:
+        query = query.filter(Invoice.transaction_id == transaction_id)
+    invoices = query.order_by(Invoice.issue_date.desc()).all()
     if not _is_admin(db, current_actor.id):
         invoices = [
             inv

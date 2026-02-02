@@ -62,3 +62,9 @@ def test_cascade_endpoints(client, db_session):
     assert fokontany == [
         {"code": "010101-001", "name": "Isotry", "commune_code": "010101"}
     ]
+
+    active = client.get("/api/v1/territories/active").json()
+    assert active["version_tag"] == "v1"
+
+    version = client.get("/api/v1/territories/versions/v1").json()
+    assert version["version_tag"] == "v1"

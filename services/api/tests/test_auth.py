@@ -40,6 +40,7 @@ def test_login_and_me(client, db_session):
     )
     assert me.status_code == 200
     assert me.json()["id"] == actor.id
+    assert "roles" in me.json()
 
 
 def test_refresh_and_logout(client, db_session):

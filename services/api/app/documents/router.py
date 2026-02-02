@@ -78,6 +78,7 @@ def list_documents(
     owner_actor_id: int | None = None,
     related_entity_type: str | None = None,
     related_entity_id: str | None = None,
+    doc_type: str | None = None,
     db: Session = Depends(get_db),
     current_actor=Depends(get_current_actor),
 ):
@@ -92,6 +93,8 @@ def list_documents(
         query = query.filter(Document.related_entity_type == related_entity_type)
     if related_entity_id:
         query = query.filter(Document.related_entity_id == related_entity_id)
+    if doc_type:
+        query = query.filter(Document.doc_type == doc_type)
     documents = query.order_by(Document.created_at.desc()).all()
     return [
         DocumentOut(

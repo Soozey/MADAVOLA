@@ -19,6 +19,26 @@ tags:
   - name: exports
   - name: admin
 paths:
+  /audit:
+    get:
+      tags: [admin]
+      summary: List audit logs
+      parameters:
+        - in: query
+          name: actor_id
+          schema: { type: integer }
+        - in: query
+          name: entity_type
+          schema: { type: string }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/AuditLog
   /health:
     get:
       tags: [admin]
@@ -199,6 +219,33 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/TerritoryVersion"
+  /territories/active:
+    get:
+      tags: [territories]
+      summary: Get active territory version
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/TerritoryVersion
+  /territories/versions/{version_tag}:
+    get:
+      tags: [territories]
+      summary: Get territory version
+      parameters:
+        - in: path
+          name: version_tag
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/TerritoryVersion
   /territories/regions:
     get:
       tags: [territories]
@@ -390,6 +437,24 @@ paths:
             application/json:
               schema:
                 $ref: #/components/schemas/TransactionDetail
+  /transactions/{transaction_id}/payments:
+    get:
+      tags: [transactions]
+      summary: List payments for transaction
+      parameters:
+        - in: path
+          name: transaction_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: #/components/schemas/TransactionPayment
   /transactions/{transaction_id}/initiate-payment:
     post:
       tags: [transactions]
@@ -578,6 +643,22 @@ paths:
             application/json:
               schema:
                 $ref: #/components/schemas/PaymentProvider
+  /payments/{payment_id}:
+    get:
+      tags: [payments]
+      summary: Get payment
+      parameters:
+        - in: path
+          name: payment_id
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/PaymentRequest
   /payments/status/{external_ref}:
     get:
       tags: [payments]
@@ -941,3 +1022,14 @@ components:
         currency: { type: string }
         status: { type: string }
         external_ref: { type: string }
+    AuditLog:
+      type: object
+      properties:
+        id: { type: integer }
+        actor_id: { type: integer, nullable: true }
+        action: { type: string }
+        entity_type: { type: string }
+        entity_id: { type: string }
+        justification: { type: string }
+        meta_json: { type: string }
+        created_at: { type: string, format: date-time }

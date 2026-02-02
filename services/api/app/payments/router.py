@@ -283,6 +283,58 @@ def list_payments(
     ]
 
 
+@router.get("/{payment_id}", response_model=PaymentRequestOut)
+def get_payment(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    payment = db.query(PaymentRequest).filter_by(id=payment_id).first()
+    if not payment:
+        raise bad_request("paiement_introuvable")
+    if not _is_admin(db, current_actor.id):
+        if current_actor.id not in (payment.payer_actor_id, payment.payee_actor_id):
+            raise bad_request("acces_refuse")
+    return PaymentRequestOut(
+        id=payment.id,
+        provider_id=payment.provider_id,
+        payer_actor_id=payment.payer_actor_id,
+        payee_actor_id=payment.payee_actor_id,
+        fee_id=payment.fee_id,
+        transaction_id=payment.transaction_id,
+        amount=float(payment.amount),
+        currency=payment.currency,
+        status=payment.status,
+        external_ref=payment.external_ref,
+    )
+
+
+@router.get("/status/{external_ref}", response_model=PaymentRequestOut)
+def get_payment_status(
+    external_ref: str,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    payment = db.query(PaymentRequest).filter_by(external_ref=external_ref).first()
+    if not payment:
+        raise bad_request("paiement_introuvable")
+    if not _is_admin(db, current_actor.id):
+        if current_actor.id not in (payment.payer_actor_id, payment.payee_actor_id):
+            raise bad_request("acces_refuse")
+    return PaymentRequestOut(
+        id=payment.id,
+        provider_id=payment.provider_id,
+        payer_actor_id=payment.payer_actor_id,
+        payee_actor_id=payment.payee_actor_id,
+        fee_id=payment.fee_id,
+        transaction_id=payment.transaction_id,
+        amount=float(payment.amount),
+        currency=payment.currency,
+        status=payment.status,
+        external_ref=payment.external_ref,
+    )
+
+
 def _is_admin(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)

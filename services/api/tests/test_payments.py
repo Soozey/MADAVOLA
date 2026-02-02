@@ -153,6 +153,18 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     document = db_session.query(Document).filter_by(related_entity_type="invoice").first()
     assert document is not None
 
+    get_by_id = client.get(
+        f"/api/v1/payments/{request.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert get_by_id.status_code == 200
+
+    get_by_ref = client.get(
+        f"/api/v1/payments/status/{payload['external_ref']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert get_by_ref.status_code == 200
+
 
 def test_list_payments_rbac(client, db_session):
     version = TerritoryVersion(

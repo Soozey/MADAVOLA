@@ -133,6 +133,12 @@ def test_initiate_transaction_payment(client, db_session):
     assert response.status_code == 201
     assert response.json()["status"] == "pending"
 
+    payments = client.get(
+        f"/api/v1/transactions/{transaction['id']}/payments",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert payments.status_code == 200
+
 
 def test_get_transaction_details(client, db_session):
     region, district, commune, version = _seed_territory(db_session)

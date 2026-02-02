@@ -176,6 +176,22 @@ def get_actor(
     )
 
 
+@router.get("/{actor_id}/roles")
+def get_actor_roles(
+    actor_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor_id:
+        raise bad_request("acces_refuse")
+    roles = (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.status == "active")
+        .all()
+    )
+    return {"actor_id": actor_id, "roles": [r.role for r in roles]}
+
+
 @router.get("", response_model=list[ActorOut])
 def list_actors(
     role: str | None = None,

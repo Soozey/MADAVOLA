@@ -55,6 +55,34 @@ def list_versions(db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/versions/{version_tag}", response_model=TerritoryVersionOut)
+def get_version(version_tag: str, db: Session = Depends(get_db)):
+    version = db.query(TerritoryVersion).filter_by(version_tag=version_tag).first()
+    if not version:
+        raise bad_request("version_introuvable")
+    return TerritoryVersionOut(
+        version_tag=version.version_tag,
+        source_filename=version.source_filename,
+        checksum_sha256=version.checksum_sha256,
+        status=version.status,
+        imported_at=version.imported_at,
+        activated_at=version.activated_at,
+    )
+
+
+@router.get("/active", response_model=TerritoryVersionOut)
+def get_active_version(db: Session = Depends(get_db)):
+    version = _get_active_version(db)
+    return TerritoryVersionOut(
+        version_tag=version.version_tag,
+        source_filename=version.source_filename,
+        checksum_sha256=version.checksum_sha256,
+        status=version.status,
+        imported_at=version.imported_at,
+        activated_at=version.activated_at,
+    )
+
+
 @router.get("/regions", response_model=list[RegionOut])
 def list_regions(db: Session = Depends(get_db)):
     active = _get_active_version(db)
