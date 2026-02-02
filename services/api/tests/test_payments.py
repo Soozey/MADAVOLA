@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from app.auth.security import hash_password
 from app.models.actor import Actor, ActorAuth
 from app.models.fee import Fee
+from app.models.document import Document
 from app.models.payment import PaymentProvider, PaymentRequest, WebhookInbox
 from app.models.transaction import TradeTransaction
 from app.models.territory import Commune, District, Region, TerritoryVersion
@@ -142,3 +143,5 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     assert fee.status == "paid"
     db_session.refresh(transaction)
     assert transaction.status == "paid"
+    document = db_session.query(Document).filter_by(related_entity_type="invoice").first()
+    assert document is not None

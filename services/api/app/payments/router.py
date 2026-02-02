@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from app.models.actor import Actor
 from app.models.fee import Fee
 from app.auth.dependencies import require_roles
 from app.models.invoice import Invoice
+from app.models.document import Document
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
 from app.models.transaction import TradeTransaction
 from app.payments.providers_schemas import ProviderCreate, ProviderOut, ProviderUpdate
@@ -238,6 +240,32 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
                     status="issued",
                 )
                 db.add(invoice)
+                storage_dir = Path(settings.document_storage_dir)
+                storage_dir.mkdir(parents=True, exist_ok=True)
+                invoice_payload = {
+                    "invoice_number": invoice_number,
+                    "transaction_id": transaction.id,
+                    "seller_actor_id": transaction.seller_actor_id,
+                    "buyer_actor_id": transaction.buyer_actor_id,
+                    "total_amount": str(transaction.total_amount),
+                    "currency": transaction.currency,
+                }
+                content = json.dumps(invoice_payload, ensure_ascii=True).encode()
+                sha256 = hashlib.sha256(content).hexdigest()
+                filename = f"{invoice_number}.json"
+                storage_path = storage_dir / filename
+                storage_path.write_bytes(content)
+                db.add(
+                    Document(
+                        doc_type="invoice",
+                        owner_actor_id=transaction.seller_actor_id,
+                        related_entity_type="invoice",
+                        related_entity_id=invoice_number,
+                        storage_path=str(storage_path),
+                        original_filename=filename,
+                        sha256=sha256,
+                    )
+                )
                 write_audit(
                     db,
                     actor_id=transaction.buyer_actor_id,

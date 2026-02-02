@@ -67,3 +67,33 @@ def upload_document(
         original_filename=document.original_filename,
         sha256=document.sha256,
     )
+
+
+@router.get("", response_model=list[DocumentOut])
+def list_documents(
+    owner_actor_id: int | None = None,
+    related_entity_type: str | None = None,
+    related_entity_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Document)
+    if owner_actor_id:
+        query = query.filter(Document.owner_actor_id == owner_actor_id)
+    if related_entity_type:
+        query = query.filter(Document.related_entity_type == related_entity_type)
+    if related_entity_id:
+        query = query.filter(Document.related_entity_id == related_entity_id)
+    documents = query.order_by(Document.created_at.desc()).all()
+    return [
+        DocumentOut(
+            id=doc.id,
+            doc_type=doc.doc_type,
+            owner_actor_id=doc.owner_actor_id,
+            related_entity_type=doc.related_entity_type,
+            related_entity_id=doc.related_entity_id,
+            storage_path=doc.storage_path,
+            original_filename=doc.original_filename,
+            sha256=doc.sha256,
+        )
+        for doc in documents
+    ]
