@@ -162,3 +162,9 @@
 - id (PK)
 - status, destination, total_weight
 - created_by_actor_id (FK actors), created_at
+
+### system_config
+- id (PK)
+- key (unique), value, description
+- updated_by_actor_id (FK actors)
+- updated_at, created_at

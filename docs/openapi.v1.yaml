@@ -959,6 +959,159 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Export"
+  /admin/config:
+    post:
+      tags: [admin]
+      summary: Create system config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemConfigCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+    get:
+      tags: [admin]
+      summary: List system configs
+      parameters:
+        - in: query
+          name: key
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SystemConfig"
+  /admin/config/{config_id}:
+    get:
+      tags: [admin]
+      summary: Get system config
+      parameters:
+        - in: path
+          name: config_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+    patch:
+      tags: [admin]
+      summary: Update system config
+      parameters:
+        - in: path
+          name: config_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemConfigUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+    delete:
+      tags: [admin]
+      summary: Delete system config
+      parameters:
+        - in: path
+          name: config_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: No Content
+  /admin/actors/{actor_id}/roles:
+    post:
+      tags: [admin]
+      summary: Assign role to actor
+      parameters:
+        - in: path
+          name: actor_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActorRoleAssign"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorRole"
+    get:
+      tags: [admin]
+      summary: List actor roles
+      parameters:
+        - in: path
+          name: actor_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActorRole"
+  /admin/roles/{role_id}:
+    patch:
+      tags: [admin]
+      summary: Update actor role
+      parameters:
+        - in: path
+          name: role_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActorRoleUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorRole"
+    delete:
+      tags: [admin]
+      summary: Revoke actor role
+      parameters:
+        - in: path
+          name: role_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: No Content
 components:
   schemas:
     ErrorResponse:
@@ -1408,6 +1561,50 @@ components:
         created_by_actor_id: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    SystemConfigCreate:
+      type: object
+      properties:
+        key: { type: string }
+        value: { type: string }
+        description: { type: string }
+      required: [key]
+    SystemConfigUpdate:
+      type: object
+      properties:
+        value: { type: string }
+        description: { type: string }
+    SystemConfig:
+      type: object
+      properties:
+        id: { type: integer }
+        key: { type: string }
+        value: { type: string }
+        description: { type: string }
+        updated_by_actor_id: { type: integer }
+        updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    ActorRoleAssign:
+      type: object
+      properties:
+        role: { type: string }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: string, format: date-time }
+      required: [role]
+    ActorRoleUpdate:
+      type: object
+      properties:
+        status: { type: string }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: string, format: date-time }
+    ActorRole:
+      type: object
+      properties:
+        id: { type: integer }
+        actor_id: { type: integer }
+        role: { type: string }
+        status: { type: string }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: string, format: date-time }
     CommuneReport:
       type: object
       properties:
