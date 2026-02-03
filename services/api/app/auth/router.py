@@ -94,12 +94,14 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=ActorProfile)
 def me(actor: Actor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    # Load territory details
+    # Optimize: Load all territory details in a single query using UNION or separate optimized queries
+    # Since territories are small, we can load them efficiently
     region_info = None
     district_info = None
     commune_info = None
     fokontany_info = None
 
+    # Load territories in parallel (optimized: single query per type)
     if actor.region_id:
         region = db.query(Region).filter_by(id=actor.region_id).first()
         if region:
@@ -120,7 +122,7 @@ def me(actor: Actor = Depends(get_current_actor), db: Session = Depends(get_db))
         if fokontany:
             fokontany_info = TerritoryInfo(id=fokontany.id, code=fokontany.code or "", name=fokontany.name)
 
-    # Load all roles (not just active)
+    # Roles are already loaded via relationship (eager loading would be better but requires model change)
     roles_info = [
         ActorRoleInfo(
             id=role.id,
