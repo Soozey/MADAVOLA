@@ -157,3 +157,8 @@
 - violation_case_id (FK violation_cases)
 - penalty_type, amount, status
 - executed_by_actor_id (FK actors), executed_at
+
+### export_dossiers
+- id (PK)
+- status, destination, total_weight
+- created_by_actor_id (FK actors), created_at
