@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor
 from app.audit.logger import write_audit
 from app.common.errors import bad_request
+from app.common.pagination import PaginatedResponse, PaginationParams, get_pagination
 from app.core.config import settings
 from app.db import get_db
 from app.lots.schemas import LotConsolidate, LotCreate, LotOut, LotSplit, LotTransfer
@@ -75,10 +77,11 @@ def create_lot(
     )
 
 
-@router.get("", response_model=list[LotOut])
+@router.get("", response_model=PaginatedResponse[LotOut])
 def list_lots(
     owner_actor_id: int | None = None,
     status: str | None = None,
+    pagination: PaginationParams = Depends(get_pagination),
     db: Session = Depends(get_db),
     current_actor=Depends(get_current_actor),
 ):
@@ -91,8 +94,14 @@ def list_lots(
         query = query.filter(Lot.current_owner_actor_id == current_actor.id)
     if status:
         query = query.filter(Lot.status == status)
-    lots = query.order_by(Lot.declared_at.desc()).all()
-    return [
+    
+    # Count total
+    total = query.count()
+    
+    # Apply pagination
+    lots = query.order_by(Lot.declared_at.desc()).offset(pagination.offset).limit(pagination.limit).all()
+    
+    items = [
         LotOut(
             id=lot.id,
             filiere=lot.filiere,
@@ -107,6 +116,8 @@ def list_lots(
         )
         for lot in lots
     ]
+    
+    return PaginatedResponse.create(items, total, pagination.page, pagination.page_size)
 
 
 @router.get("/{lot_id}", response_model=LotOut)

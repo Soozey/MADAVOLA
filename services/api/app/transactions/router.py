@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor
 from app.common.errors import bad_request
+from app.common.pagination import PaginatedResponse, PaginationParams, get_pagination
 from app.core.config import settings
 from app.db import get_db
 from app.models.actor import Actor, ActorRole
@@ -71,11 +72,12 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
     )
 
 
-@router.get("", response_model=list[TransactionOut])
+@router.get("", response_model=PaginatedResponse[TransactionOut])
 def list_transactions(
     seller_actor_id: int | None = None,
     buyer_actor_id: int | None = None,
     status: str | None = None,
+    pagination: PaginationParams = Depends(get_pagination),
     db: Session = Depends(get_db),
     current_actor=Depends(get_current_actor),
 ):
@@ -86,17 +88,23 @@ def list_transactions(
             | (TradeTransaction.buyer_actor_id == current_actor.id)
         )
         if seller_actor_id and seller_actor_id != current_actor.id:
-            return []
+            return PaginatedResponse.create([], 0, pagination.page, pagination.page_size)
         if buyer_actor_id and buyer_actor_id != current_actor.id:
-            return []
+            return PaginatedResponse.create([], 0, pagination.page, pagination.page_size)
     if seller_actor_id:
         query = query.filter(TradeTransaction.seller_actor_id == seller_actor_id)
     if buyer_actor_id:
         query = query.filter(TradeTransaction.buyer_actor_id == buyer_actor_id)
     if status:
         query = query.filter(TradeTransaction.status == status)
-    transactions = query.order_by(TradeTransaction.created_at.desc()).all()
-    return [
+    
+    # Count total
+    total = query.count()
+    
+    # Apply pagination
+    transactions = query.order_by(TradeTransaction.created_at.desc()).offset(pagination.offset).limit(pagination.limit).all()
+    
+    items = [
         TransactionOut(
             id=txn.id,
             seller_actor_id=txn.seller_actor_id,
@@ -107,6 +115,8 @@ def list_transactions(
         )
         for txn in transactions
     ]
+    
+    return PaginatedResponse.create(items, total, pagination.page, pagination.page_size)
 
 
 @router.get("/{transaction_id}", response_model=TransactionDetailOut)
