@@ -136,3 +136,24 @@
 - actor_id (FK actors), lot_id (FK lots)
 - movement_type, quantity_delta
 - ref_event_type, ref_event_id, created_at
+
+### inspections
+- id (PK)
+- inspector_actor_id (FK actors)
+- inspected_actor_id (FK actors, nullable)
+- inspected_lot_id (FK lots, nullable)
+- inspected_invoice_id (FK invoices, nullable)
+- result, reason_code, notes, geo_point_id (FK geo_points)
+- created_at
+
+### violation_cases
+- id (PK)
+- inspection_id (FK inspections)
+- violation_type, legal_basis_ref
+- status, created_at
+
+### penalties
+- id (PK)
+- violation_case_id (FK violation_cases)
+- penalty_type, amount, status
+- executed_by_actor_id (FK actors), executed_at

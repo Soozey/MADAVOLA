@@ -1171,3 +1171,55 @@ components:
         actor_id: { type: integer }
         lot_id: { type: integer }
         quantity: { type: number }
+    InspectionCreate:
+      type: object
+      properties:
+        inspected_actor_id: { type: integer }
+        inspected_lot_id: { type: integer }
+        inspected_invoice_id: { type: integer }
+        result: { type: string }
+        reason_code: { type: string }
+        notes: { type: string }
+        geo_point_id: { type: integer }
+      required: [result]
+    Inspection:
+      type: object
+      properties:
+        id: { type: integer }
+        inspector_actor_id: { type: integer }
+        inspected_actor_id: { type: integer }
+        inspected_lot_id: { type: integer }
+        inspected_invoice_id: { type: integer }
+        result: { type: string }
+        reason_code: { type: string }
+        notes: { type: string }
+    ViolationCreate:
+      type: object
+      properties:
+        inspection_id: { type: integer }
+        violation_type: { type: string }
+        legal_basis_ref: { type: string }
+      required: [inspection_id, violation_type]
+    Violation:
+      type: object
+      properties:
+        id: { type: integer }
+        inspection_id: { type: integer }
+        violation_type: { type: string }
+        legal_basis_ref: { type: string }
+        status: { type: string }
+    PenaltyCreate:
+      type: object
+      properties:
+        violation_case_id: { type: integer }
+        penalty_type: { type: string }
+        amount: { type: number }
+      required: [violation_case_id, penalty_type]
+    Penalty:
+      type: object
+      properties:
+        id: { type: integer }
+        violation_case_id: { type: integer }
+        penalty_type: { type: string }
+        amount: { type: number }
+        status: { type: string }
