@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy.orm import relationship
 
 from app.models.base import Base
 
@@ -14,3 +15,18 @@ class ExportDossier(Base):
     total_weight = Column(Numeric(14, 4))
     created_by_actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    lots = relationship("ExportLot", back_populates="export_dossier")
+
+
+class ExportLot(Base):
+    __tablename__ = "export_lots"
+
+    id = Column(Integer, primary_key=True)
+    export_dossier_id = Column(Integer, ForeignKey("export_dossiers.id"), nullable=False)
+    lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False)
+    quantity_in_export = Column(Numeric(14, 4), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+    export_dossier = relationship("ExportDossier", back_populates="lots")

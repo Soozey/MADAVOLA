@@ -859,10 +859,106 @@ paths:
     post:
       tags: [exports]
       summary: Create export dossier
-      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportCreate"
       responses:
         "201":
           description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Export"
+    get:
+      tags: [exports]
+      summary: List export dossiers
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: date_from
+          schema: { type: string, format: date }
+        - in: query
+          name: date_to
+          schema: { type: string, format: date }
+        - in: query
+          name: created_by_actor_id
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Export"
+  /exports/{export_id}:
+    get:
+      tags: [exports]
+      summary: Get export dossier
+      parameters:
+        - in: path
+          name: export_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Export"
+  /exports/{export_id}/status:
+    patch:
+      tags: [exports]
+      summary: Update export status
+      parameters:
+        - in: path
+          name: export_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportStatusUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Export"
+  /exports/{export_id}/lots:
+    post:
+      tags: [exports]
+      summary: Link lots to export
+      parameters:
+        - in: path
+          name: export_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExportLotLink"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Export"
 components:
   schemas:
     ErrorResponse:
@@ -1291,6 +1387,17 @@ components:
       properties:
         destination: { type: string }
         total_weight: { type: number }
+    ExportStatusUpdate:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+    ExportLotLink:
+      type: object
+      properties:
+        lot_id: { type: integer }
+        quantity_in_export: { type: number }
+      required: [lot_id, quantity_in_export]
     Export:
       type: object
       properties:
@@ -1299,6 +1406,8 @@ components:
         destination: { type: string }
         total_weight: { type: number }
         created_by_actor_id: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     CommuneReport:
       type: object
       properties:
