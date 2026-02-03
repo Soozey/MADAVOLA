@@ -98,14 +98,14 @@ paths:
   /auth/me:
     get:
       tags: [auth]
-      summary: Current actor profile
+      summary: Current actor profile (enriched with territory and roles)
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Actor"
+                $ref: "#/components/schemas/ActorProfile"
   /actors:
     post:
       tags: [actors]
@@ -1179,6 +1179,47 @@ components:
       properties:
         status: { type: string }
         justification: { type: string }
+    TerritoryInfo:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+    ActorRoleInfo:
+      type: object
+      properties:
+        id: { type: integer }
+        role: { type: string }
+        status: { type: string }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: string, format: date-time }
+    ActorProfile:
+      type: object
+      properties:
+        id: { type: integer }
+        type_personne: { type: string }
+        nom: { type: string }
+        prenoms: { type: string }
+        telephone: { type: string }
+        email: { type: string }
+        status: { type: string }
+        cin: { type: string }
+        nif: { type: string }
+        stat: { type: string }
+        rccm: { type: string }
+        region:
+          $ref: "#/components/schemas/TerritoryInfo"
+        district:
+          $ref: "#/components/schemas/TerritoryInfo"
+        commune:
+          $ref: "#/components/schemas/TerritoryInfo"
+        fokontany:
+          $ref: "#/components/schemas/TerritoryInfo"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActorRoleInfo"
+        created_at: { type: string, format: date-time }
     Region:
       type: object
       properties:

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor
-from app.auth.schemas import LoginRequest, RefreshRequest, TokenPair
+from app.auth.schemas import ActorProfile, ActorRoleInfo, LoginRequest, RefreshRequest, TerritoryInfo, TokenPair
 from app.auth.security import (
     create_access_token,
     create_refresh_token,
@@ -15,6 +15,7 @@ from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
 from app.models.actor import Actor, ActorAuth, RefreshToken
+from app.models.territory import Commune, District, Fokontany, Region
 
 router = APIRouter(prefix=f"{settings.api_prefix}/auth", tags=["auth"])
 
@@ -91,28 +92,62 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
-@router.get("/me")
-def me(actor: Actor = Depends(get_current_actor)):
-    roles = [
-        role.role
+@router.get("/me", response_model=ActorProfile)
+def me(actor: Actor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    # Load territory details
+    region_info = None
+    district_info = None
+    commune_info = None
+    fokontany_info = None
+
+    if actor.region_id:
+        region = db.query(Region).filter_by(id=actor.region_id).first()
+        if region:
+            region_info = TerritoryInfo(id=region.id, code=region.code, name=region.name)
+
+    if actor.district_id:
+        district = db.query(District).filter_by(id=actor.district_id).first()
+        if district:
+            district_info = TerritoryInfo(id=district.id, code=district.code, name=district.name)
+
+    if actor.commune_id:
+        commune = db.query(Commune).filter_by(id=actor.commune_id).first()
+        if commune:
+            commune_info = TerritoryInfo(id=commune.id, code=commune.code, name=commune.name)
+
+    if actor.fokontany_id:
+        fokontany = db.query(Fokontany).filter_by(id=actor.fokontany_id).first()
+        if fokontany:
+            fokontany_info = TerritoryInfo(id=fokontany.id, code=fokontany.code or "", name=fokontany.name)
+
+    # Load all roles (not just active)
+    roles_info = [
+        ActorRoleInfo(
+            id=role.id,
+            role=role.role,
+            status=role.status,
+            valid_from=role.valid_from,
+            valid_to=role.valid_to,
+        )
         for role in actor.roles
-        if role.status == "active"
     ]
-    region = actor.region_id and actor.region_id
-    district = actor.district_id and actor.district_id
-    commune = actor.commune_id and actor.commune_id
-    fokontany = actor.fokontany_id and actor.fokontany_id
-    return {
-        "id": actor.id,
-        "type_personne": actor.type_personne,
-        "nom": actor.nom,
-        "prenoms": actor.prenoms,
-        "telephone": actor.telephone,
-        "email": actor.email,
-        "status": actor.status,
-        "roles": roles,
-        "region_id": region,
-        "district_id": district,
-        "commune_id": commune,
-        "fokontany_id": fokontany,
-    }
+
+    return ActorProfile(
+        id=actor.id,
+        type_personne=actor.type_personne,
+        nom=actor.nom,
+        prenoms=actor.prenoms,
+        telephone=actor.telephone,
+        email=actor.email,
+        status=actor.status,
+        cin=actor.cin,
+        nif=actor.nif,
+        stat=actor.stat,
+        rccm=actor.rccm,
+        region=region_info,
+        district=district_info,
+        commune=commune_info,
+        fokontany=fokontany_info,
+        roles=roles_info,
+        created_at=actor.created_at,
+    )

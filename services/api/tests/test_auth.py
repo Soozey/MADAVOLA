@@ -1,10 +1,60 @@
 from datetime import datetime, timezone
 
 from app.auth.security import hash_password
-from app.models.actor import Actor, ActorAuth, RefreshToken
+from app.models.actor import Actor, ActorAuth, ActorRole, RefreshToken
+from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
 
 
-def _create_actor(db_session, status="active"):
+def _seed_territory(db_session):
+    version = TerritoryVersion(
+        version_tag="v1",
+        source_filename="seed.xlsx",
+        checksum_sha256="seed",
+        status="active",
+        imported_at=datetime.now(timezone.utc),
+        activated_at=datetime.now(timezone.utc),
+    )
+    db_session.add(version)
+    db_session.flush()
+    region = Region(
+        version_id=version.id,
+        code="01",
+        name="Analamanga",
+        name_normalized="analamanga",
+    )
+    db_session.add(region)
+    db_session.flush()
+    district = District(
+        version_id=version.id,
+        region_id=region.id,
+        code="0101",
+        name="Antananarivo Renivohitra",
+        name_normalized="antananarivo",
+    )
+    db_session.add(district)
+    db_session.flush()
+    commune = Commune(
+        version_id=version.id,
+        district_id=district.id,
+        code="010101",
+        name="Antananarivo I",
+        name_normalized="antananarivo i",
+    )
+    db_session.add(commune)
+    db_session.flush()
+    fokontany = Fokontany(
+        version_id=version.id,
+        commune_id=commune.id,
+        code="010101-001",
+        name="Isotry",
+        name_normalized="isotry",
+    )
+    db_session.add(fokontany)
+    db_session.commit()
+    return region, district, commune, fokontany, version
+
+
+def _create_actor(db_session, region, district, commune, fokontany, version, status="active"):
     actor = Actor(
         type_personne="physique",
         nom="Test",
@@ -12,6 +62,11 @@ def _create_actor(db_session, status="active"):
         telephone="0340000000",
         email="test@example.com",
         status=status,
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        fokontany_id=fokontany.id,
+        territory_version_id=version.id,
         created_at=datetime.now(timezone.utc),
     )
     db_session.add(actor)
@@ -24,7 +79,20 @@ def _create_actor(db_session, status="active"):
 
 
 def test_login_and_me(client, db_session):
-    actor = _create_actor(db_session)
+    region, district, commune, fokontany, version = _seed_territory(db_session)
+    actor = _create_actor(db_session, region, district, commune, fokontany, version)
+    
+    # Add a role
+    db_session.add(
+        ActorRole(
+            actor_id=actor.id,
+            role="acteur",
+            status="active",
+            valid_from=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
     response = client.post(
         "/api/v1/auth/login",
         json={"identifier": "test@example.com", "password": "secret"},
@@ -39,8 +107,27 @@ def test_login_and_me(client, db_session):
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert me.status_code == 200
-    assert me.json()["id"] == actor.id
-    assert "roles" in me.json()
+    data = me.json()
+    assert data["id"] == actor.id
+    assert data["nom"] == "Test"
+    assert data["prenoms"] == "User"
+    
+    # Check territory info
+    assert data["region"] is not None
+    assert data["region"]["code"] == "01"
+    assert data["region"]["name"] == "Analamanga"
+    assert data["district"] is not None
+    assert data["district"]["code"] == "0101"
+    assert data["commune"] is not None
+    assert data["commune"]["code"] == "010101"
+    assert data["fokontany"] is not None
+    assert data["fokontany"]["code"] == "010101-001"
+    
+    # Check roles
+    assert "roles" in data
+    assert len(data["roles"]) == 1
+    assert data["roles"][0]["role"] == "acteur"
+    assert data["roles"][0]["status"] == "active"
 
 
 def test_refresh_and_logout(client, db_session):
