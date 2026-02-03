@@ -15,6 +15,7 @@ from app.lots.router import router as lots_router
 from app.payments.router import router as payments_router
 from app.payments.providers_router import router as payment_providers_router
 from app.penalties.router import router as penalties_router
+from app.reports.router import router as reports_router
 from app.territories.router import router as territories_router
 from app.transactions.router import router as transactions_router
 from app.violations.router import router as violations_router
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(payments_router)
     app.include_router(payment_providers_router)
     app.include_router(penalties_router)
+    app.include_router(reports_router)
     app.include_router(territories_router)
     app.include_router(transactions_router)
     app.include_router(violations_router)

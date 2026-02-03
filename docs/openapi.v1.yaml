@@ -17,6 +17,7 @@ tags:
   - name: documents
   - name: inspections
   - name: exports
+  - name: reports
   - name: admin
 paths:
   /audit:
@@ -784,6 +785,68 @@ paths:
       responses:
         "201":
           description: Created
+  /reports/commune:
+    get:
+      tags: [reports]
+      summary: Commune report
+      parameters:
+        - in: query
+          name: commune_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: date_from
+          schema: { type: string, format: date }
+        - in: query
+          name: date_to
+          schema: { type: string, format: date }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/CommuneReport
+  /reports/actor:
+    get:
+      tags: [reports]
+      summary: Actor report
+      parameters:
+        - in: query
+          name: actor_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: date_from
+          schema: { type: string, format: date }
+        - in: query
+          name: date_to
+          schema: { type: string, format: date }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/ActorReport
+  /reports/national:
+    get:
+      tags: [reports]
+      summary: National report
+      parameters:
+        - in: query
+          name: date_from
+          schema: { type: string, format: date }
+        - in: query
+          name: date_to
+          schema: { type: string, format: date }
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/NationalReport
   /inspections:
     post:
       tags: [inspections]
@@ -1236,3 +1299,20 @@ components:
         destination: { type: string }
         total_weight: { type: number }
         created_by_actor_id: { type: integer }
+    CommuneReport:
+      type: object
+      properties:
+        commune_id: { type: integer }
+        volume_created: { type: number }
+        transactions_total: { type: number }
+    ActorReport:
+      type: object
+      properties:
+        actor_id: { type: integer }
+        volume_created: { type: number }
+        transactions_total: { type: number }
+    NationalReport:
+      type: object
+      properties:
+        volume_created: { type: number }
+        transactions_total: { type: number }
