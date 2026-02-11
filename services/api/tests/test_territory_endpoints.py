@@ -41,27 +41,28 @@ def test_cascade_endpoints(client, db_session):
     import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
 
     regions = client.get("/api/v1/territories/regions").json()
-    assert regions == [{"code": "01", "name": "Analamanga"}]
+    assert len(regions) == 1
+    assert regions[0]["code"] == "01"
+    assert regions[0]["name"] == "Analamanga"
 
     districts = client.get("/api/v1/territories/districts?region_code=01").json()
-    assert districts == [
-        {"code": "0101", "name": "Antananarivo Renivohitra", "region_code": "01"}
-    ]
+    assert len(districts) == 1
+    assert districts[0]["code"] == "0101"
+    assert districts[0]["name"] == "Antananarivo Renivohitra"
+    assert districts[0]["region_code"] == "01"
 
     communes = client.get("/api/v1/territories/communes?district_code=0101").json()
-    assert communes == [
-        {
-            "code": "010101",
-            "name": "Antananarivo I",
-            "district_code": "0101",
-            "commune_mobile_money_msisdn": None,
-        }
-    ]
+    assert len(communes) == 1
+    assert communes[0]["code"] == "010101"
+    assert communes[0]["name"] == "Antananarivo I"
+    assert communes[0]["district_code"] == "0101"
+    assert communes[0]["commune_mobile_money_msisdn"] is None
 
     fokontany = client.get("/api/v1/territories/fokontany?commune_code=010101").json()
-    assert fokontany == [
-        {"code": "010101-001", "name": "Isotry", "commune_code": "010101"}
-    ]
+    assert len(fokontany) == 1
+    assert fokontany[0]["code"] == "010101-001"
+    assert fokontany[0]["name"] == "Isotry"
+    assert fokontany[0]["commune_code"] == "010101"
 
     active = client.get("/api/v1/territories/active").json()
     assert active["version_tag"] == "v1"

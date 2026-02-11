@@ -54,7 +54,17 @@ def _seed_territory(db_session):
     return region, district, commune, fokontany, version
 
 
-def _create_actor(db_session, region, district, commune, fokontany, version, status="active"):
+def _create_actor(
+    db_session,
+    region=None,
+    district=None,
+    commune=None,
+    fokontany=None,
+    version=None,
+    status="active",
+):
+    if not all([region, district, commune, fokontany, version]):
+        region, district, commune, fokontany, version = _seed_territory(db_session)
     actor = Actor(
         type_personne="physique",
         nom="Test",

@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import hashlib
+import re
 
 from app.auth.security import hash_password
 from app.models.actor import Actor, ActorAuth, ActorRole
@@ -47,11 +49,16 @@ def _seed_territory(db_session):
 
 
 def _create_actor_with_role(db_session, region, district, commune, version, email, role_name=None):
+    local_part = email.split("@")[0]
+    digits = re.sub(r"\D", "", local_part)[-4:]
+    if not digits:
+        digits = f"{int(hashlib.sha1(local_part.encode('utf-8')).hexdigest(), 16) % 10000:04d}"
+    phone_suffix = digits.rjust(4, "0")
     actor = Actor(
         type_personne="physique",
         nom="Test",
         prenoms="User",
-        telephone="0340001300",
+        telephone=f"034000{phone_suffix}",
         email=email,
         status="active",
         region_id=region.id,

@@ -217,8 +217,6 @@ def test_list_payments_rbac(client, db_session):
     other = _create_actor(
         db_session, "other2@example.com", "0340000013", region.id, district.id, commune.id, version.id
     )
-    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
-    db_session.commit()
 
     request = PaymentRequest(
         provider_id=provider.id,

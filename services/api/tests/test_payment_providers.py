@@ -16,6 +16,7 @@ def _create_admin(db_session):
     )
     db_session.add(version)
     db_session.flush()
+
     region = Region(
         version_id=version.id,
         code="01",
@@ -24,6 +25,7 @@ def _create_admin(db_session):
     )
     db_session.add(region)
     db_session.flush()
+
     district = District(
         version_id=version.id,
         region_id=region.id,
@@ -33,6 +35,7 @@ def _create_admin(db_session):
     )
     db_session.add(district)
     db_session.flush()
+
     commune = Commune(
         version_id=version.id,
         district_id=district.id,
@@ -42,6 +45,7 @@ def _create_admin(db_session):
     )
     db_session.add(commune)
     db_session.flush()
+
     actor = Actor(
         type_personne="physique",
         nom="Admin",
@@ -78,67 +82,19 @@ def test_payment_provider_crud(client, db_session):
     )
     assert create.status_code == 201
 
+    listed = client.get(
+        "/api/v1/payment-providers",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    assert listed.json()[0]["code"] == "mvola"
+
+    provider_id = create.json()["id"]
     update = client.patch(
-        "/api/v1/payment-providers/1",
+        f"/api/v1/payment-providers/{provider_id}",
         headers={"Authorization": f"Bearer {token}"},
         json={"enabled": True},
     )
     assert update.status_code == 200
     assert update.json()["enabled"] is True
-from datetime import datetime, timezone
-
-from app.auth.security import hash_password
-from app.models.actor import Actor, ActorAuth, ActorRole
-
-
-def _create_admin(db_session):
-    actor = Actor(
-        type_personne="physique",
-        nom="Admin",
-        prenoms="Test",
-        telephone="0340000999",
-        email="admin@example.com",
-        status="active",
-        region_id=1,
-        district_id=1,
-        commune_id=1,
-        territory_version_id=1,
-        created_at=datetime.now(timezone.utc),
-    )
-    db_session.add(actor)
-    db_session.flush()
-    db_session.add(ActorAuth(actor_id=actor.id, password_hash=hash_password("secret"), is_active=1))
-    db_session.add(ActorRole(actor_id=actor.id, role="admin", status="active"))
-    db_session.commit()
-    return actor
-
-
-def test_provider_crud(client, db_session):
-    admin = _create_admin(db_session)
-    login = client.post(
-        "/api/v1/auth/login",
-        json={"identifier": admin.email, "password": "secret"},
-    )
-    token = login.json()["access_token"]
-
-    created = client.post(
-        "/api/v1/payments/providers",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"code": "mvola", "name": "mVola", "enabled": True},
-    )
-    assert created.status_code == 201
-
-    listed = client.get(
-        "/api/v1/payments/providers",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert listed.status_code == 200
-    assert listed.json()[0]["code"] == "mvola"
-
-    updated = client.patch(
-        f"/api/v1/payments/providers/{created.json()['id']}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"enabled": False},
-    )
-    assert updated.status_code == 200
-    assert updated.json()["enabled"] is False

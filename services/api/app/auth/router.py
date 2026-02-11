@@ -82,7 +82,10 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     stored = db.query(RefreshToken).filter_by(token_id=token_id).first()
     if not stored or stored.revoked_at is not None:
         raise bad_request("refresh_invalide")
-    if stored.expires_at < datetime.now(timezone.utc):
+    expires_at = stored.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
         raise bad_request("refresh_expire")
 
     access_token = create_access_token(actor_id)

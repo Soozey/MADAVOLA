@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_actor
+from app.auth.dependencies import get_current_actor, get_actor_role_codes
+from app.auth.roles_config import has_permission, PERM_AUDIT_LOGS
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
@@ -12,6 +13,13 @@ from app.audit.schemas import AuditLogOut
 router = APIRouter(prefix=f"{settings.api_prefix}/audit", tags=["admin"])
 
 
+def _can_see_all_audit(db, actor) -> bool:
+    if _is_admin(db, actor.id):
+        return True
+    role_codes = get_actor_role_codes(actor, db)
+    return has_permission(role_codes, PERM_AUDIT_LOGS)  # BIANCO, Justice (réquisition à part)
+
+
 @router.get("", response_model=list[AuditLogOut])
 def list_audit_logs(
     actor_id: int | None = None,
@@ -20,7 +28,7 @@ def list_audit_logs(
     current_actor=Depends(get_current_actor),
 ):
     query = db.query(AuditLog)
-    if not _is_admin(db, current_actor.id):
+    if not _can_see_all_audit(db, current_actor):
         query = query.filter(AuditLog.actor_id == current_actor.id)
         if actor_id and actor_id != current_actor.id:
             return []

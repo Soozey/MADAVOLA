@@ -74,7 +74,8 @@ def import_territory_excel(
     if not parsed:
         raise bad_request("fichier_vide")
 
-    with db.begin():
+    transaction = db.begin_nested() if db.in_transaction() else db.begin()
+    with transaction:
         current_active = (
             db.query(TerritoryVersion).filter_by(status="active").with_for_update().first()
         )

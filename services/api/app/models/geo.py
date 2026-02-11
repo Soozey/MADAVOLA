@@ -20,4 +20,5 @@ class GeoPoint(Base):
     device_id = Column(String(100))
     actor_id = Column(Integer, ForeignKey("actors.id"), nullable=True)
 
-    actor = relationship("Actor", back_populates="geo_points")
+    # actor relationship removed temporarily due to ambiguous foreign key issue
+    # Can be re-added later with proper foreign_keys specification if needed

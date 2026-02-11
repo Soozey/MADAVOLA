@@ -87,7 +87,10 @@ def list_inspections(
 def _is_inspector(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)
-        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["controleur"]))
+        .filter(
+            ActorRole.actor_id == actor_id,
+            ActorRole.role.in_(["controleur", "admin", "dirigeant", "mmrs", "dgd", "police", "gendarmerie", "forets"]),
+        )
         .first()
         is not None
     )

@@ -1,0 +1,26 @@
+﻿# secrets
+.env
+.env.*
+!.env.example
+
+# Office temp
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+expo/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/

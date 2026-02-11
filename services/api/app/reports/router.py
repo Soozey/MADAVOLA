@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_actor
+from app.auth.dependencies import get_current_actor, get_actor_role_codes
+from app.auth.roles_config import has_permission, PERM_DASHBOARD_NATIONAL, PERM_DASHBOARD_REGIONAL, PERM_ADMIN_COMMUNE
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
@@ -24,9 +25,11 @@ def report_commune(
     db: Session = Depends(get_db),
     current_actor=Depends(get_current_actor),
 ):
-    if not _is_admin(db, current_actor.id):
-        if not _is_commune_agent(db, current_actor.id) or current_actor.commune_id != commune_id:
-            raise bad_request("acces_refuse")
+    role_codes = get_actor_role_codes(current_actor, db)
+    if not _is_admin(db, current_actor.id) and not has_permission(role_codes, PERM_ADMIN_COMMUNE):
+        raise bad_request("acces_refuse")
+    if "commune_agent" in role_codes and current_actor.commune_id != commune_id:
+        raise bad_request("acces_refuse")
     start_dt, end_dt = _date_range(date_from, date_to)
 
     volume_created = (
@@ -95,7 +98,8 @@ def report_national(
     db: Session = Depends(get_db),
     current_actor=Depends(get_current_actor),
 ):
-    if not _is_admin(db, current_actor.id):
+    role_codes = get_actor_role_codes(current_actor, db)
+    if not _is_admin(db, current_actor.id) and not has_permission(role_codes, PERM_DASHBOARD_NATIONAL):
         raise bad_request("acces_refuse")
     start_dt, end_dt = _date_range(date_from, date_to)
     volume_created = (

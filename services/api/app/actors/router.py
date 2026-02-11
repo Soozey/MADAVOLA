@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_actor, require_roles
-from app.auth.dependencies import get_current_actor, get_optional_actor
+from app.auth.dependencies import get_current_actor, get_optional_actor, require_roles
 from app.auth.security import hash_password
 from app.common.errors import bad_request
 from app.core.config import settings
@@ -13,7 +12,7 @@ from app.audit.logger import write_audit
 from app.models.actor import Actor, ActorAuth, ActorRole
 from app.models.geo import GeoPoint
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
-from app.actors.schemas import ActorCreate, ActorOut
+from app.actors.schemas import ActorCreate, ActorOut, ActorStatusUpdate
 
 router = APIRouter(prefix=f"{settings.api_prefix}/actors", tags=["actors"])
 
@@ -192,10 +191,67 @@ def get_actor_roles(
     return {"actor_id": actor_id, "roles": [r.role for r in roles]}
 
 
+@router.patch("/{actor_id}/status", response_model=ActorOut)
+def update_actor_status(
+    actor_id: int,
+    payload: ActorStatusUpdate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent"})),
+):
+    """Valider ou rejeter un acteur (statut pending → active ou rejected). Réservé maire/commune_agent (même commune) ou admin."""
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    if not actor:
+        raise bad_request("acteur_introuvable")
+    if actor.status != "pending":
+        raise bad_request("acteur_invalide")  # déjà traité
+    is_admin_or_dir = _is_admin(db, current_actor.id)
+    is_commune_agent = _is_commune_agent(db, current_actor.id)
+    if is_commune_agent and current_actor.commune_id != actor.commune_id:
+        raise bad_request("acces_refuse_commune")
+    if not is_admin_or_dir and not is_commune_agent:
+        raise bad_request("acces_refuse")
+    if payload.status not in ("active", "rejected"):
+        raise bad_request("acteur_invalide")
+    actor.status = payload.status
+    write_audit(
+        db,
+        actor_id=current_actor.id,
+        action="actor_status_updated",
+        entity_type="actor",
+        entity_id=str(actor_id),
+        justification=None,
+        meta={"new_status": payload.status},
+    )
+    db.commit()
+    db.refresh(actor)
+    region = db.query(Region).filter_by(id=actor.region_id).first()
+    district = db.query(District).filter_by(id=actor.district_id).first()
+    commune = db.query(Commune).filter_by(id=actor.commune_id).first()
+    fokontany = (
+        db.query(Fokontany).filter_by(id=actor.fokontany_id).first()
+        if actor.fokontany_id
+        else None
+    )
+    return ActorOut(
+        id=actor.id,
+        type_personne=actor.type_personne,
+        nom=actor.nom,
+        prenoms=actor.prenoms,
+        telephone=actor.telephone,
+        email=actor.email,
+        status=actor.status,
+        region_code=region.code if region else "",
+        district_code=district.code if district else "",
+        commune_code=commune.code if commune else "",
+        fokontany_code=fokontany.code if fokontany else None,
+    )
+
+
 @router.get("", response_model=list[ActorOut])
 def list_actors(
     role: str | None = None,
     commune_code: str | None = None,
+    status: str | None = None,
     db: Session = Depends(get_db),
     current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent"})),
 ):
@@ -210,6 +266,8 @@ def list_actors(
     if is_commune_agent:
         query = query.filter(Actor.commune_id == current_actor.commune_id)
 
+    if status:
+        query = query.filter(Actor.status == status)
     if role:
         query = query.join(ActorRole).filter(ActorRole.role == role)
 

@@ -2,6 +2,7 @@ from io import BytesIO
 
 import openpyxl
 
+from app.models.actor import Actor
 from app.territories.importer import import_territory_excel
 
 
@@ -91,6 +92,9 @@ def test_get_geo_point_rbac(client, db_session):
             "roles": ["orpailleur"],
         },
     ).json()
+    actor_row = db_session.query(Actor).filter_by(id=actor["id"]).first()
+    actor_row.status = "active"
+    db_session.commit()
 
     login = client.post(
         "/api/v1/auth/login",

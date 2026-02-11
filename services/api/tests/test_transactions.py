@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
-from app.models.actor import Actor
+from app.auth.security import hash_password
+from app.models.actor import Actor, ActorAuth
 from app.models.territory import Commune, District, Region, TerritoryVersion
 
 
@@ -59,6 +60,8 @@ def _create_actor(db_session, email: str, phone: str, region_id, district_id, co
         created_at=datetime.now(timezone.utc),
     )
     db_session.add(actor)
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=actor.id, password_hash=hash_password("secret"), is_active=1))
     db_session.commit()
     return actor
 
@@ -159,7 +162,15 @@ def test_get_transaction_details(client, db_session):
         },
     ).json()
 
-    details = client.get(f"/api/v1/transactions/{transaction['id']}")
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": seller.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    details = client.get(
+        f"/api/v1/transactions/{transaction['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert details.status_code == 200
     payload = details.json()
     assert payload["id"] == transaction["id"]
@@ -184,15 +195,20 @@ def test_list_transactions_filter(client, db_session):
         },
     )
 
-    response = client.get(f"/api/v1/transactions?seller_actor_id={seller.id}")
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": seller.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+    response = client.get(
+        f"/api/v1/transactions?seller_actor_id={seller.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == 200
-    assert len(response.json()) >= 1
+    assert len(response.json()["items"]) >= 1
 
 
 def test_transactions_rbac(client, db_session):
-    from app.auth.security import hash_password
-    from app.models.actor import ActorAuth
-
     region, district, commune, version = _seed_territory(db_session)
     seller = _create_actor(
         db_session, "seller5@example.com", "0340005001", region.id, district.id, commune.id, version.id
@@ -203,8 +219,6 @@ def test_transactions_rbac(client, db_session):
     other = _create_actor(
         db_session, "other@example.com", "0340005003", region.id, district.id, commune.id, version.id
     )
-    db_session.add(ActorAuth(actor_id=other.id, password_hash=hash_password("secret"), is_active=1))
-    db_session.commit()
 
     transaction = client.post(
         "/api/v1/transactions",

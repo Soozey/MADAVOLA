@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class RegionOut(BaseModel):
+    id: int | None = None  # présent quand utilisé pour dashboards / sélecteurs
     code: str
     name: str
 

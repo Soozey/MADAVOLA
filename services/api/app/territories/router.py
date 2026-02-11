@@ -92,7 +92,7 @@ def list_regions(db: Session = Depends(get_db)):
         .order_by(Region.name.asc())
         .all()
     )
-    return [RegionOut(code=r.code, name=r.name) for r in regions]
+    return [RegionOut(id=r.id, code=r.code, name=r.name) for r in regions]
 
 
 @router.get("/districts", response_model=list[DistrictOut])

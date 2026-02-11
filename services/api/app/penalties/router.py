@@ -52,10 +52,46 @@ def create_penalty(
     )
 
 
+@router.get("", response_model=list[PenaltyOut])
+def list_penalties(
+    violation_case_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    query = db.query(Penalty)
+    if not _is_admin(db, current_actor.id) and not _is_inspector(db, current_actor.id):
+        return []
+    if violation_case_id is not None:
+        query = query.filter(Penalty.violation_case_id == violation_case_id)
+    penalties = query.order_by(Penalty.id.desc()).all()
+    return [
+        PenaltyOut(
+            id=p.id,
+            violation_case_id=p.violation_case_id,
+            penalty_type=p.penalty_type,
+            amount=float(p.amount) if p.amount is not None else None,
+            status=p.status,
+        )
+        for p in penalties
+    ]
+
+
+def _is_admin(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
+    )
+
+
 def _is_inspector(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)
-        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["controleur"]))
+        .filter(
+            ActorRole.actor_id == actor_id,
+            ActorRole.role.in_(["controleur", "admin", "dirigeant", "mmrs", "dgd", "police", "gendarmerie", "forets"]),
+        )
         .first()
         is not None
     )

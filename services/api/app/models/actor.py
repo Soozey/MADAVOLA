@@ -1,9 +1,13 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.geo import GeoPoint
 
 
 class Actor(Base):
@@ -30,7 +34,8 @@ class Actor(Base):
 
     roles = relationship("ActorRole", back_populates="actor")
     auth = relationship("ActorAuth", back_populates="actor", uselist=False)
-    geo_points = relationship("GeoPoint", back_populates="actor")
+    # geo_points relationship removed temporarily due to ambiguous foreign key issue
+    # Can be re-added later with proper foreign_keys specification if needed
 
 
 class ActorRole(Base):

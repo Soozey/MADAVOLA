@@ -51,10 +51,46 @@ def create_violation(
     )
 
 
+@router.get("", response_model=list[ViolationOut])
+def list_violations(
+    inspection_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    query = db.query(ViolationCase)
+    if not _is_admin(db, current_actor.id) and not _is_inspector(db, current_actor.id):
+        return []
+    if inspection_id is not None:
+        query = query.filter(ViolationCase.inspection_id == inspection_id)
+    violations = query.order_by(ViolationCase.id.desc()).all()
+    return [
+        ViolationOut(
+            id=v.id,
+            inspection_id=v.inspection_id,
+            violation_type=v.violation_type,
+            legal_basis_ref=v.legal_basis_ref,
+            status=v.status,
+        )
+        for v in violations
+    ]
+
+
+def _is_admin(db: Session, actor_id: int) -> bool:
+    return (
+        db.query(ActorRole)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["admin", "dirigeant"]))
+        .first()
+        is not None
+    )
+
+
 def _is_inspector(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)
-        .filter(ActorRole.actor_id == actor_id, ActorRole.role.in_(["controleur"]))
+        .filter(
+            ActorRole.actor_id == actor_id,
+            ActorRole.role.in_(["controleur", "admin", "dirigeant", "mmrs", "dgd", "police", "gendarmerie", "forets"]),
+        )
         .first()
         is not None
     )

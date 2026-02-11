@@ -20,6 +20,10 @@ class ActorCreate(BaseModel):
     roles: list[str]
 
 
+class ActorStatusUpdate(BaseModel):
+    status: str  # "active" | "rejected"
+
+
 class ActorOut(BaseModel):
     id: int
     type_personne: str

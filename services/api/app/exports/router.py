@@ -178,7 +178,7 @@ def update_export_status(
         action="export_status_changed",
         entity_type="export",
         entity_id=str(dossier.id),
-        metadata={"old_status": old_status, "new_status": payload.status},
+        meta={"old_status": old_status, "new_status": payload.status},
     )
 
     return ExportOut.model_validate(dossier)
@@ -235,7 +235,8 @@ def link_lots_to_export(
         action="export_lots_linked",
         entity_type="export",
         entity_id=str(dossier.id),
-        metadata={"lots_count": len(payload)},
+        meta={"lots_count": len(payload)},
     )
 
     return ExportOut.model_validate(dossier)
+

@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from io import BytesIO
 
+from app.auth.security import hash_password
 from app.models.actor import Actor
+from app.models.actor import ActorAuth
 from app.models.document import Document
 from app.models.territory import Commune, District, Region, TerritoryVersion
 
@@ -62,11 +64,20 @@ def test_upload_document(client, db_session):
         created_at=datetime.now(timezone.utc),
     )
     db_session.add(actor)
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=actor.id, password_hash=hash_password("secret"), is_active=1))
     db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": actor.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
 
     file_content = b"test-file"
     response = client.post(
         "/api/v1/documents",
+        headers={"Authorization": f"Bearer {token}"},
         data={
             "doc_type": "facture",
             "owner_actor_id": str(actor.id),

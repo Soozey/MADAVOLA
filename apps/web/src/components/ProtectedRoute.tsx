@@ -5,7 +5,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
   if (loading) {
-    return <div>Chargement...</div>
+    return (
+      <div className="loading">
+        <div>Chargement...</div>
+      </div>
+    )
   }
 
   if (!user) {

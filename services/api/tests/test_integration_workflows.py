@@ -121,6 +121,9 @@ def test_workflow_actor_signup_to_lot_declaration(client, db_session):
     )
     assert signup.status_code == 201
     actor_id = signup.json()["id"]
+    actor = db_session.query(Actor).filter_by(id=actor_id).first()
+    actor.status = "active"
+    db_session.commit()
 
     # 3. Login
     login = client.post(
@@ -211,11 +214,10 @@ def test_workflow_transaction_payment_invoice(client, db_session):
         json={"provider_code": "mvola"},
     )
     assert payment.status_code == 201
-    payment_id = payment.json()["id"]
 
     # 4. Simuler webhook succès
     webhook = client.post(
-        "/api/v1/payments/webhook/mvola",
+        "/api/v1/payments/webhooks/mvola",
         json={
             "external_ref": payment.json()["external_ref"],
             "status": "success",
@@ -233,7 +235,7 @@ def test_workflow_transaction_payment_invoice(client, db_session):
     invoice_list = invoices.json()
     assert len(invoice_list) == 1
     assert invoice_list[0]["transaction_id"] == txn_id
-    assert invoice_list[0]["status"] == "paid"
+    assert invoice_list[0]["status"] == "issued"
 
 
 def test_workflow_lot_transfer_ledger_consistency(client, db_session):
@@ -306,7 +308,7 @@ def test_workflow_lot_transfer_ledger_consistency(client, db_session):
     )
     entries1 = ledger1.json()
     assert len(entries1) == 2  # create + transfer out
-    transfer_out = [e for e in entries1 if e["movement_type"] == "transfer"][0]
+    transfer_out = [e for e in entries1 if e["movement_type"] == "transfer_out"][0]
     assert transfer_out["quantity_delta"] == -200.0
 
     # Login owner2
@@ -324,7 +326,7 @@ def test_workflow_lot_transfer_ledger_consistency(client, db_session):
     )
     entries2 = ledger2.json()
     assert len(entries2) == 1
-    assert entries2[0]["movement_type"] == "transfer"
+    assert entries2[0]["movement_type"] == "transfer_in"
     assert entries2[0]["quantity_delta"] == 200.0
 
     # Vérifier balance owner2

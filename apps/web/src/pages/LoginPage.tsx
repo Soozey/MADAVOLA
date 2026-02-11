@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { getErrorMessage } from '../lib/apiErrors'
+import './LoginPage.css'
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('')
@@ -18,96 +20,49 @@ export default function LoginPage() {
     try {
       await login(identifier, password)
       navigate('/dashboard')
-    } catch (err: any) {
-      setError(err.response?.data?.detail?.message || 'Erreur de connexion')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Identifiant ou mot de passe incorrect.'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          backgroundColor: 'white',
-          padding: '40px',
-          borderRadius: '8px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-          width: '100%',
-          maxWidth: '400px',
-        }}
-      >
-        <h1 style={{ marginBottom: '30px', textAlign: 'center' }}>MADAVOLA</h1>
+    <div className="login-page">
+      <form onSubmit={handleSubmit} className="login-form">
+        <div className="login-header">
+          <h1>MADAVOLA</h1>
+          <p className="login-subtitle">Plateforme de gestion de transactions pour la filière agricole à Madagascar</p>
+        </div>
         {error && (
-          <div
-            style={{
-              padding: '10px',
-              backgroundColor: '#ffebee',
-              color: '#c62828',
-              borderRadius: '4px',
-              marginBottom: '20px',
-            }}
-          >
+          <div className="alert alert-error">
             {error}
           </div>
         )}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
-            Email ou Téléphone
-          </label>
+        <div className="form-group">
+          <label htmlFor="identifier">Email ou Téléphone</label>
           <input
             type="text"
+            id="identifier"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-            }}
+            placeholder="admin@madavola.mg ou 0340000000"
           />
+          <span className="form-hint">Format téléphone : 03XXXXXXXX (10 chiffres)</span>
         </div>
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
-            Mot de passe
-          </label>
+        <div className="form-group">
+          <label htmlFor="password">Mot de passe</label>
           <input
             type="password"
+            id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-            }}
+            placeholder="••••••••"
           />
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '12px',
-            backgroundColor: '#1976d2',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize: '16px',
-          }}
-        >
+        <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
           {loading ? 'Connexion...' : 'Se connecter'}
         </button>
       </form>

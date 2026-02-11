@@ -47,7 +47,7 @@ def create_config(
         action="config_created",
         entity_type="system_config",
         entity_id=str(config.id),
-        metadata={"key": payload.key},
+        meta={"key": payload.key},
     )
     db.commit()
     db.refresh(config)
@@ -107,7 +107,7 @@ def update_config(
         action="config_updated",
         entity_type="system_config",
         entity_id=str(config.id),
-        metadata={"key": config.key, "old_value": old_value, "new_value": config.value},
+        meta={"key": config.key, "old_value": old_value, "new_value": config.value},
     )
 
     return SystemConfigOut.model_validate(config)
@@ -133,7 +133,7 @@ def delete_config(
         action="config_deleted",
         entity_type="system_config",
         entity_id=str(config_id),
-        metadata={"key": key},
+        meta={"key": key},
     )
 
 
@@ -174,7 +174,7 @@ def assign_role(
         action="role_assigned",
         entity_type="actor_role",
         entity_id=str(role.id),
-        metadata={"target_actor_id": actor_id, "role": payload.role},
+        meta={"target_actor_id": actor_id, "role": payload.role},
     )
     db.commit()
     db.refresh(role)
@@ -223,7 +223,7 @@ def update_role(
         action="role_updated",
         entity_type="actor_role",
         entity_id=str(role_id),
-        metadata={"actor_id": role.actor_id, "role": role.role, "old_status": old_status, "new_status": role.status},
+        meta={"actor_id": role.actor_id, "role": role.role, "old_status": old_status, "new_status": role.status},
     )
 
     return ActorRoleOut.model_validate(role)
@@ -250,5 +250,6 @@ def revoke_role(
         action="role_revoked",
         entity_type="actor_role",
         entity_id=str(role_id),
-        metadata={"target_actor_id": actor_id, "role": role_name},
+        meta={"target_actor_id": actor_id, "role": role_name},
     )
+
