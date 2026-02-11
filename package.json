@@ -1,0 +1,9 @@
+{
+  "name": "madavola",
+  "private": true,
+  "packageManager": "pnpm@latest",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

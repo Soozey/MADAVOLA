@@ -1,94 +1,68 @@
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { getVisibleMenuItems } from '../config/rolesMenu'
+import './Layout.css'
 
 export default function Layout() {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
-  const isActive = (path: string) => location.pathname === path
+  const userRoles = user?.roles?.map((r) => r.role) ?? []
+  const effectiveRoles = userRoles
+  const menuItems = getVisibleMenuItems(effectiveRoles)
+
+  // Si la page actuelle n'est pas dans le menu du rÃ´le affichÃ©, rediriger vers le tableau de bord
+  useEffect(() => {
+    const path = location.pathname
+    const allowedPaths = menuItems.map((item) => item.path)
+    const isAllowed =
+      path === '/' ||
+      path === '/dashboard' ||
+      allowedPaths.some((p) => path === p || path.startsWith(p + '/'))
+    if (!isAllowed && menuItems.length > 0) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [location.pathname, menuItems, navigate])
+
+  const isActive = (path: string) => {
+    if (path === '/dashboard') return location.pathname === '/dashboard' || location.pathname === '/'
+    return location.pathname.startsWith(path)
+  }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <aside
-        style={{
-          width: '250px',
-          backgroundColor: '#1a1a1a',
-          padding: '20px',
-          color: 'white',
-        }}
-      >
-        <h2 style={{ marginBottom: '30px' }}>MADAVOLA</h2>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <Link
-            to="/dashboard"
-            style={{
-              padding: '10px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              color: isActive('/dashboard') ? '#fff' : '#aaa',
-              backgroundColor: isActive('/dashboard') ? '#333' : 'transparent',
-            }}
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/actors"
-            style={{
-              padding: '10px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              color: isActive('/actors') ? '#fff' : '#aaa',
-              backgroundColor: isActive('/actors') ? '#333' : 'transparent',
-            }}
-          >
-            Acteurs
-          </Link>
-          <Link
-            to="/lots"
-            style={{
-              padding: '10px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              color: isActive('/lots') ? '#fff' : '#aaa',
-              backgroundColor: isActive('/lots') ? '#333' : 'transparent',
-            }}
-          >
-            Lots
-          </Link>
-          <Link
-            to="/transactions"
-            style={{
-              padding: '10px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              color: isActive('/transactions') ? '#fff' : '#aaa',
-              backgroundColor: isActive('/transactions') ? '#333' : 'transparent',
-            }}
-          >
-            Transactions
-          </Link>
+    <div className="layout">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h2>MADAVOLA</h2>
+        </div>
+        <nav className="sidebar-nav">
+          {menuItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`nav-link ${isActive(item.path) ? 'active' : ''}`}
+            >
+              <span>{item.icon}</span>
+              {item.label}
+            </Link>
+          ))}
         </nav>
-        <div style={{ marginTop: 'auto', paddingTop: '30px' }}>
-          <div style={{ marginBottom: '10px', fontSize: '14px' }}>
-            {user?.nom} {user?.prenoms}
+        <div className="sidebar-footer">
+          <div className="user-info">
+            <div className="user-name">{user?.nom} {user?.prenoms}</div>
+            <div className="user-email">{user?.email}</div>
+            <div className="user-roles">
+              {userRoles.length ? userRoles.join(', ') : 'Aucun rÃ´le'}
+            </div>
           </div>
-          <button
-            onClick={logout}
-            style={{
-              width: '100%',
-              padding: '10px',
-              backgroundColor: '#d32f2f',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Déconnexion
+          <button onClick={logout} className="btn-danger" style={{ width: '100%' }}>
+            DÃ©connexion
           </button>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: '20px', backgroundColor: '#f5f5f5' }}>
+      <main className="main-content">
         <Outlet />
       </main>
     </div>

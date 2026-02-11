@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor
@@ -20,18 +21,38 @@ from app.models.territory import Commune, District, Fokontany, Region
 router = APIRouter(prefix=f"{settings.api_prefix}/auth", tags=["auth"])
 
 
+def _normalize_phone_mg(identifier: str) -> str | None:
+    """0340000000 -> +261340000000 ; +261340000000 inchangé."""
+    s = identifier.strip().replace(" ", "")
+    if s.startswith("+261") and len(s) == 12:
+        return s
+    if s.startswith("261") and len(s) == 11:
+        return "+" + s
+    if s.startswith("0") and len(s) == 10 and s[1:].isdigit():
+        return "+261" + s[1:]
+    return None
+
+
 @router.post("/login", response_model=TokenPair)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    actor = (
-        db.query(Actor)
-        .filter((Actor.email == payload.identifier) | (Actor.telephone == payload.identifier))
-        .first()
-    )
+    identifier = (payload.identifier or "").strip()
+    password = (payload.password or "").strip()
+    if not identifier or not password:
+        raise bad_request("identifiants_invalides")
+
+    conditions = [
+        Actor.email == identifier,
+        Actor.telephone == identifier,
+    ]
+    normalized = _normalize_phone_mg(identifier)
+    if normalized:
+        conditions.append(Actor.telephone == normalized)
+    actor = db.query(Actor).filter(or_(*conditions)).first()
     if not actor or not actor.auth:
         raise bad_request("identifiants_invalides")
     if actor.status != "active":
         raise bad_request("compte_inactif")
-    if not verify_password(payload.password, actor.auth.password_hash):
+    if not verify_password(password, actor.auth.password_hash):
         raise bad_request("identifiants_invalides")
     if not actor.auth.is_active:
         raise bad_request("auth_desactivee")
