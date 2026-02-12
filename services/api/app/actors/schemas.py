@@ -36,3 +36,5 @@ class ActorOut(BaseModel):
     district_code: str
     commune_code: str
     fokontany_code: str | None = None
+    opening_fee_id: int | None = None
+    opening_fee_status: str | None = None

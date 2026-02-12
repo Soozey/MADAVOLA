@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base
@@ -20,6 +20,11 @@ class Lot(Base):
     status = Column(String(20), nullable=False, default="available")
     declare_geo_point_id = Column(Integer, ForeignKey("geo_points.id"), nullable=False)
     parent_lot_id = Column(Integer, ForeignKey("lots.id"))
+    notes = Column(Text)
+    photo_urls_json = Column(Text)
+    qr_code = Column(String(255), unique=True)
+    declaration_receipt_number = Column(String(80), unique=True)
+    declaration_receipt_document_id = Column(Integer, ForeignKey("documents.id"))
 
     parent = relationship("Lot", remote_side=[id])
 

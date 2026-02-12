@@ -9,3 +9,4 @@ class InvoiceOut(BaseModel):
     buyer_actor_id: int
     total_amount: float
     status: str
+    qr_code: str | None = None

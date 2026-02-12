@@ -37,6 +37,7 @@ def list_invoices(
             buyer_actor_id=inv.buyer_actor_id,
             total_amount=float(inv.total_amount),
             status=inv.status,
+            qr_code=inv.qr_code,
         )
         for inv in invoices
     ]
@@ -62,6 +63,7 @@ def get_invoice(
         buyer_actor_id=invoice.buyer_actor_id,
         total_amount=float(invoice.total_amount),
         status=invoice.status,
+        qr_code=invoice.qr_code,
     )
 
 

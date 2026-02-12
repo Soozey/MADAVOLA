@@ -23,6 +23,7 @@ class PaymentInitiateResponse(BaseModel):
 class WebhookPayload(BaseModel):
     external_ref: str
     status: str
+    operator_ref: str | None = None
 
 
 class PaymentRequestOut(BaseModel):
@@ -36,6 +37,8 @@ class PaymentRequestOut(BaseModel):
     currency: str
     status: str
     external_ref: str
+    beneficiary_label: str | None = None
+    beneficiary_msisdn: str | None = None
 
 
 class PaymentProviderCreate(BaseModel):

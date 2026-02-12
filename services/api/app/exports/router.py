@@ -1,12 +1,13 @@
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor, require_roles
 from app.audit.logger import write_audit
 from app.common.errors import bad_request
+from app.common.receipts import build_qr_value
 from app.core.config import settings
 from app.db import get_db
 from app.exports.schemas import ExportCreate, ExportOut, ExportStatusUpdate, ExportLotLink
@@ -63,12 +64,17 @@ def _can_access_export(db: Session, current_actor: Actor, export: ExportDossier)
 def create_export(
     payload: ExportCreate,
     db: Session = Depends(get_db),
-    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur"})),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur", "comptoir_operator", "comptoir_compliance", "comptoir_director"})),
 ):
+    sequence = db.query(ExportDossier).count() + 1
     dossier = ExportDossier(
         destination=payload.destination,
+        destination_country=payload.destination_country,
+        transport_mode=payload.transport_mode,
         total_weight=payload.total_weight,
+        declared_value=payload.declared_value,
         status="draft",
+        dossier_number=f"EXP-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{sequence:06d}",
         created_by_actor_id=current_actor.id,
     )
     db.add(dossier)
@@ -92,7 +98,7 @@ def list_exports(
     date_to: date | None = Query(None),
     created_by_actor_id: int | None = Query(None),
     db: Session = Depends(get_db),
-    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur"})),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur", "comptoir_operator", "comptoir_compliance", "comptoir_director"})),
 ):
     query = db.query(ExportDossier)
 
@@ -127,7 +133,7 @@ def list_exports(
 def get_export(
     export_id: int,
     db: Session = Depends(get_db),
-    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur"})),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur", "comptoir_operator", "comptoir_compliance", "comptoir_director"})),
 ):
     dossier = db.query(ExportDossier).filter_by(id=export_id).first()
     if not dossier:
@@ -142,13 +148,13 @@ def update_export_status(
     export_id: int,
     payload: ExportStatusUpdate,
     db: Session = Depends(get_db),
-    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur"})),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur", "comptoir_operator", "comptoir_compliance", "comptoir_director"})),
 ):
     dossier = db.query(ExportDossier).filter_by(id=export_id).first()
     if not dossier:
         raise bad_request("export_introuvable")
 
-    valid_statuses = {"draft", "submitted", "approved", "rejected"}
+    valid_statuses = {"draft", "submitted", "ready_for_control", "controlled", "sealed", "exported", "approved", "rejected"}
     if payload.status not in valid_statuses:
         raise bad_request("statut_invalide", {"valid_statuses": list(valid_statuses)})
 
@@ -164,6 +170,8 @@ def update_export_status(
 
     old_status = dossier.status
     dossier.status = payload.status
+    if payload.status == "sealed":
+        dossier.sealed_qr = build_qr_value("export", dossier.dossier_number or str(dossier.id))
     dossier.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(dossier)
@@ -185,7 +193,7 @@ def link_lots_to_export(
     export_id: int,
     payload: list[ExportLotLink],
     db: Session = Depends(get_db),
-    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur"})),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune_agent", "acteur", "comptoir_operator", "comptoir_compliance", "comptoir_director"})),
 ):
     dossier = db.query(ExportDossier).filter_by(id=export_id).first()
     if not dossier:

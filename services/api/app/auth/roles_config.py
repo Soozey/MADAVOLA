@@ -235,6 +235,35 @@ ROLE_DEFINITIONS: dict[str, RoleDefinition] = {
         "permissions": [],
         "description": "Acteur filière or.",
     },
+    "collecteur": {
+        "level": "communautaire",
+        "institution": "Collecteur",
+        "acronym": "",
+        "permissions": [],
+        "description": "Acheteur intermediaire, consolidation lots et vente au comptoir.",
+    },
+    "comptoir_operator": {
+        "level": "central",
+        "institution": "Comptoir",
+        "acronym": "",
+        "permissions": [PERM_CONTROLE_EXPORT],
+        "description": "Operateur comptoir: reception lots, preparation dossier export.",
+    },
+    "comptoir_compliance": {
+        "level": "central",
+        "institution": "Comptoir",
+        "acronym": "",
+        "permissions": [PERM_CONTROLE_EXPORT, PERM_AUDIT_LOGS],
+        "description": "Responsable conformite comptoir: controles documentaires et tracabilite.",
+    },
+    "comptoir_director": {
+        "level": "central",
+        "institution": "Comptoir",
+        "acronym": "",
+        "permissions": [PERM_CONTROLE_EXPORT, PERM_DASHBOARD_NATIONAL, PERM_AUDIT_LOGS],
+        "description": "Directeur comptoir: validation finale et supervision.",
+    },
+
 }
 
 

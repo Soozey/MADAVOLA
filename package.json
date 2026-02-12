@@ -3,8 +3,9 @@
   "private": true,
   "scripts": {
     "build:web": "npm run build --workspace @madavola/web",
+    "build:mobile": "npm run build --workspace @madavola/mobile",
     "build:web-admin": "npm run build --workspace madavola-web-admin",
-    "test:api": "cd services/api && PYTHONPATH=. pytest -q",
+    "test:api": "cd services/api && python -c \"import sys,pytest; sys.path.insert(0,'.'); raise SystemExit(pytest.main(['-q']))\"",
     "check:web-bundle": "node scripts/check-web-bundle.mjs",
     "ci": "npm run build:web && npm run build:web-admin && npm run check:web-bundle && npm run test:api"
   },

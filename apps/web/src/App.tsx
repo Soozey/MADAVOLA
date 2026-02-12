@@ -15,6 +15,8 @@ import LotDetailPage from './pages/LotDetailPage'
 import ActorDetailPage from './pages/ActorDetailPage'
 import MaCartePage from './pages/MaCartePage'
 import VerifyActorPage from './pages/VerifyActorPage'
+import VerifyLotPage from './pages/VerifyLotPage'
+import VerifyInvoicePage from './pages/VerifyInvoicePage'
 import VerifyEntryPage from './pages/VerifyEntryPage'
 import ReportsPage from './pages/ReportsPage'
 import AuditPage from './pages/AuditPage'
@@ -34,6 +36,8 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/verify/actor/:id" element={<VerifyActorPage />} />
+            <Route path="/verify/lot/:id" element={<VerifyLotPage />} />
+            <Route path="/verify/invoice/:ref" element={<VerifyInvoicePage />} />
             <Route
               path="/"
               element={

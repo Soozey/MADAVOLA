@@ -30,6 +30,8 @@ class PaymentRequest(Base):
     status = Column(String(20), nullable=False, default="pending")
     external_ref = Column(String(80), nullable=False, unique=True)
     idempotency_key = Column(String(80))
+    beneficiary_label = Column(String(255))
+    beneficiary_msisdn = Column(String(32))
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     provider = relationship("PaymentProvider")

@@ -7,12 +7,6 @@ import { api } from '../lib/api'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { getApiDetailFromError, getApiErrorMessage } from '../lib/apiErrors'
-import {
-  HARDCODED_REGIONS,
-  getHardcodedDistricts,
-  getHardcodedCommunes,
-  getHardcodedFokontany,
-} from '../data/territories'
 import './ActorsPage.css'
 
 // Centre Madagascar (pour la carte)
@@ -38,6 +32,8 @@ function MapClickHandler({ onSelect }: { onSelect: (lat: number, lon: number) =>
 const ROLES_OPTIONS = [
   { value: 'acteur', label: 'Acteur' },
   { value: 'orpailleur', label: 'Orpailleur' },
+  { value: 'collecteur', label: 'Collecteur' },
+  { value: 'comptoir_operator', label: 'Comptoir (Operateur)' },
   { value: 'commune_agent', label: 'Agent commune' },
 ]
 
@@ -47,6 +43,7 @@ export default function ActorsPage() {
   const [regionCode, setRegionCode] = useState('')
   const [districtCode, setDistrictCode] = useState('')
   const [communeCode, setCommuneCode] = useState('')
+  const [providerCode, setProviderCode] = useState('mvola')
   const [mapLat, setMapLat] = useState(DEFAULT_LAT)
   const [mapLon, setMapLon] = useState(DEFAULT_LON)
   const queryClient = useQueryClient()
@@ -56,14 +53,26 @@ export default function ActorsPage() {
   const effectiveRoles = userRoles
   const canValidateActors = userRoles.some((r) => ['admin', 'dirigeant', 'commune_agent'].includes(r))
   const showValidationSection = effectiveRoles.some((r) => ['admin', 'commune_agent'].includes(r))
-
-  // Utiliser les territoires en dur (UTF-8) pour des libellÃ©s avec accents corrects
-  const regions = HARDCODED_REGIONS
-  const districts = regionCode ? getHardcodedDistricts(regionCode) : []
-  const communes = districtCode ? getHardcodedCommunes(districtCode) : []
-  const fokontanyList = communeCode ? getHardcodedFokontany(communeCode) : []
-  const districtsLoading = false
-  const communesLoading = false
+  const { data: regions = [] } = useQuery({
+    queryKey: ['territories', 'regions'],
+    queryFn: () => api.getRegions(),
+  })
+  const { data: districts = [], isLoading: districtsLoading } = useQuery({
+    queryKey: ['territories', 'districts', regionCode],
+    queryFn: () => api.getDistricts(regionCode),
+    enabled: !!regionCode,
+  })
+  const { data: communes = [], isLoading: communesLoading } = useQuery({
+    queryKey: ['territories', 'communes', districtCode],
+    queryFn: () => api.getCommunes(districtCode),
+    enabled: !!districtCode,
+  })
+  const { data: fokontanyList = [] } = useQuery({
+    queryKey: ['territories', 'fokontany', communeCode],
+    queryFn: () => api.getFokontany(communeCode),
+    enabled: !!communeCode,
+  })
+  const selectedCommune = (communes as any[]).find((c: any) => c.code === communeCode)
 
   useEffect(() => {
     if (!regionCode) setDistrictCode('')
@@ -118,7 +127,7 @@ export default function ActorsPage() {
         accuracy_m: 10,
         source: 'web',
       })
-      return api.createActor({
+      const actor = await api.createActor({
         type_personne: payload.type_personne,
         nom: payload.nom,
         prenoms: payload.prenoms || '',
@@ -132,11 +141,23 @@ export default function ActorsPage() {
         geo_point_id: geo.id,
         roles: payload.roles,
       })
+      if (actor.opening_fee_id) {
+        const payment = await api.initiateFeePayment(actor.opening_fee_id, {
+          provider_code: providerCode,
+          external_ref: `signup-fee-${actor.opening_fee_id}-${Date.now()}`,
+        })
+        return { actor, payment }
+      }
+      return { actor, payment: null }
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['actors'] })
       setShowForm(false)
-      toast.success("Acteur crÃ©Ã© avec succÃ¨s. L'acteur pourra se connecter aprÃ¨s validation par la commune si nÃ©cessaire.")
+      if (result?.payment?.beneficiary_msisdn) {
+        toast.success(`Compte cree. Frais d'ouverture initie vers ${result.payment.beneficiary_msisdn}.`)
+      } else {
+        toast.success("Acteur cree avec succes. L'acteur pourra se connecter apres validation/paiement.")
+      }
     },
   })
 
@@ -346,6 +367,11 @@ export default function ActorsPage() {
                       </option>
                     ))}
                   </select>
+                  {selectedCommune?.commune_mobile_money_msisdn && (
+                    <span className="form-hint">
+                      Beneficiaire communal (frais ouverture): {selectedCommune.commune_mobile_money_msisdn}
+                    </span>
+                  )}
                 </div>
                 <div className="form-group">
                   <label htmlFor="fokontany_code">Fokontany</label>
@@ -370,6 +396,19 @@ export default function ActorsPage() {
                         {r.label}
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="provider_code">Paiement frais ouverture</label>
+                  <select
+                    id="provider_code"
+                    name="provider_code"
+                    value={providerCode}
+                    onChange={(e) => setProviderCode(e.target.value)}
+                  >
+                    <option value="mvola">Mvola</option>
+                    <option value="orange_money">Orange Money</option>
+                    <option value="airtel_money">Airtel Money</option>
                   </select>
                 </div>
                 <div className="form-group form-group-map">

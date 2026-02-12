@@ -3,13 +3,14 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_actor
+from app.auth.dependencies import get_current_actor, get_optional_actor
 from app.common.errors import bad_request
 from app.common.pagination import PaginatedResponse, PaginationParams, get_pagination
 from app.core.config import settings
 from app.db import get_db
 from app.models.actor import Actor, ActorRole
 from app.models.payment import Payment, PaymentProvider, PaymentRequest
+from app.models.lot import Lot
 from app.models.transaction import TradeTransaction, TradeTransactionItem
 from app.transactions.schemas import (
     TransactionCreate,
@@ -24,17 +25,33 @@ router = APIRouter(prefix=f"{settings.api_prefix}/transactions", tags=["transact
 
 
 @router.post("", response_model=TransactionOut, status_code=201)
-def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)):
+def create_transaction(
+    payload: TransactionCreate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_optional_actor),
+):
     seller = db.query(Actor).filter_by(id=payload.seller_actor_id).first()
     buyer = db.query(Actor).filter_by(id=payload.buyer_actor_id).first()
     if not seller or not buyer:
         raise bad_request("acteur_invalide")
+    if current_actor and not _is_admin(db, current_actor.id) and current_actor.id != payload.seller_actor_id:
+        raise bad_request("acces_refuse")
     if not payload.items:
         raise bad_request("items_obligatoires")
 
     total = Decimal("0.00")
     items = []
     for item in payload.items:
+        if item.lot_id is not None:
+            lot = db.query(Lot).filter_by(id=item.lot_id).first()
+            if not lot:
+                raise bad_request("lot_introuvable")
+            if lot.current_owner_actor_id != payload.seller_actor_id:
+                raise bad_request("lot_non_proprietaire")
+            if lot.status not in {"available", "available_for_sale"}:
+                raise bad_request("lot_non_disponible")
+            if float(item.quantity) > float(lot.quantity):
+                raise bad_request("quantite_superieure_stock")
         qty = Decimal(str(item.quantity))
         unit = Decimal(str(item.unit_price))
         line_amount = qty * unit

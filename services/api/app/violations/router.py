@@ -48,6 +48,7 @@ def create_violation(
         violation_type=violation.violation_type,
         legal_basis_ref=violation.legal_basis_ref,
         status=violation.status,
+        lot_action_status=violation.lot_action_status,
     )
 
 
@@ -70,6 +71,7 @@ def list_violations(
             violation_type=v.violation_type,
             legal_basis_ref=v.legal_basis_ref,
             status=v.status,
+            lot_action_status=v.lot_action_status,
         )
         for v in violations
     ]

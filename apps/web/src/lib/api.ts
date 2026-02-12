@@ -150,7 +150,7 @@ class ApiClient {
     return response.data
   }
 
-  async createExport(data: { destination?: string; total_weight?: number }) {
+  async createExport(data: { destination?: string; destination_country?: string; transport_mode?: string; total_weight?: number; declared_value?: number }) {
     const response = await this.client.post('/exports', data)
     return response.data
   }
@@ -198,7 +198,7 @@ class ApiClient {
     return response.data
   }
 
-  async createPenalty(data: { violation_case_id: number; penalty_type: string; amount?: number }) {
+  async createPenalty(data: { violation_case_id: number; penalty_type: string; amount?: number; action_on_lot?: string; seized_to_actor_id?: number }) {
     const response = await this.client.post('/penalties', data)
     return response.data
   }
@@ -318,6 +318,19 @@ class ApiClient {
     return response.data
   }
 
+  async getFees(params?: { actor_id?: number }) {
+    const response = await this.client.get('/fees', { params })
+    return response.data
+  }
+
+  async initiateFeePayment(
+    feeId: number,
+    data: { provider_code: string; external_ref?: string; idempotency_key?: string }
+  ) {
+    const response = await this.client.post(`/fees/${feeId}/initiate-payment`, data)
+    return response.data
+  }
+
   async getInspections(params?: { page?: number; page_size?: number }) {
     const response = await this.client.get('/inspections', { params })
     return response.data
@@ -326,6 +339,16 @@ class ApiClient {
   /** Vérification publique (sans auth) pour scan QR par contrôleur */
   async getVerifyActor(actorId: number) {
     const response = await this.client.get(`/verify/actor/${actorId}`)
+    return response.data
+  }
+
+  async getVerifyLot(lotId: number) {
+    const response = await this.client.get(`/verify/lot/${lotId}`)
+    return response.data
+  }
+
+  async getVerifyInvoice(invoiceRef: string) {
+    const response = await this.client.get(`/verify/invoice/${invoiceRef}`)
     return response.data
   }
 }

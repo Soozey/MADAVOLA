@@ -25,6 +25,8 @@ export default function LotsPage() {
       product_type: string
       quantity: number
       unit: string
+      notes?: string
+      photo_urls: string[]
       lat: number
       lon: number
       declared_by_actor_id: number
@@ -40,6 +42,8 @@ export default function LotsPage() {
         product_type: payload.product_type,
         quantity: payload.quantity,
         unit: payload.unit,
+        notes: payload.notes,
+        photo_urls: payload.photo_urls,
         declare_geo_point_id: geo.id,
         declared_by_actor_id: payload.declared_by_actor_id,
       })
@@ -47,7 +51,7 @@ export default function LotsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lots'] })
       setShowForm(false)
-      toast.success('Lot déclaré avec succès. Le grand livre (ledger) a été mis à jour.')
+      toast.success('Lot declare avec succes. Recu et QR generes.')
     },
   })
 
@@ -60,6 +64,11 @@ export default function LotsPage() {
       product_type: formData.get('product_type') as string,
       quantity: parseFloat(formData.get('quantity') as string),
       unit: formData.get('unit') as string,
+      notes: ((formData.get('notes') as string) || '').trim() || undefined,
+      photo_urls: ((formData.get('photo_urls') as string) || '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean),
       lat: Number(formData.get('lat')),
       lon: Number(formData.get('lon')),
       declared_by_actor_id: user.id,
@@ -68,7 +77,7 @@ export default function LotsPage() {
 
   const errorDetail = createMutation.isError ? getApiDetailFromError(createMutation.error) : null
   const errorMessage = createMutation.isError
-    ? getApiErrorMessage(errorDetail, 'Erreur lors de la déclaration du lot.')
+    ? getApiErrorMessage(errorDetail, 'Erreur lors de la declaration du lot.')
     : ''
 
   if (isLoading) return <div className="loading">Chargement...</div>
@@ -84,49 +93,57 @@ export default function LotsPage() {
 
       {showForm && (
         <div className="card form-card">
-          <h2>Déclaration de lot</h2>
-          <p className="process-label">Étape 2 du processus : déclarer un lot (filière, type, quantité). Le lieu GPS enregistre le point de déclaration.</p>
+          <h2>Declaration de lot</h2>
+          <p className="process-label">
+            Etape 2: declaration lot (or brut/pepites/concentre), quantite, unite, GPS, preuves.
+          </p>
           {!user ? (
-            <p className="form-warning">Vous devez être connecté pour créer un lot.</p>
+            <p className="form-warning">Vous devez etre connecte pour creer un lot.</p>
           ) : (
             <form onSubmit={handleSubmit}>
               <div className="form-grid">
                 <div className="form-group">
-                  <label htmlFor="filiere">Filière *</label>
+                  <label htmlFor="filiere">Filiere *</label>
                   <input type="text" id="filiere" name="filiere" required defaultValue="OR" />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="product_type">Type de produit *</label>
-                  <input type="text" id="product_type" name="product_type" required placeholder="ex: Riz" />
+                  <label htmlFor="product_type">Type produit *</label>
+                  <input type="text" id="product_type" name="product_type" required placeholder="or_brut" />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="quantity">Quantité *</label>
-                  <input type="number" id="quantity" name="quantity" step="0.01" required />
+                  <label htmlFor="quantity">Quantite *</label>
+                  <input type="number" id="quantity" name="quantity" step="0.01" min="0.01" required />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="unit">Unité *</label>
+                  <label htmlFor="unit">Unite *</label>
                   <select id="unit" name="unit" required>
-                    <option value="">Sélectionner...</option>
+                    <option value="">Selectionner...</option>
+                    <option value="g">g</option>
                     <option value="kg">kg</option>
-                    <option value="tonne">tonne</option>
-                    <option value="litre">litre</option>
-                    <option value="unité">unité</option>
+                    <option value="akotry">akotry</option>
                   </select>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="lat">Latitude (GPS) *</label>
-                  <input type="number" id="lat" name="lat" required step="any" placeholder="ex: -18.8792" />
-                  <span className="form-hint">Coordonnées du lieu de déclaration</span>
+                  <label htmlFor="notes">Notes</label>
+                  <input type="text" id="notes" name="notes" />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="lon">Longitude (GPS) *</label>
-                  <input type="number" id="lon" name="lon" required step="any" placeholder="ex: 47.5079" />
+                  <label htmlFor="photo_urls">Photos URL (comma separated)</label>
+                  <input type="text" id="photo_urls" name="photo_urls" placeholder="https://...,https://..." />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="lat">Latitude *</label>
+                  <input type="number" id="lat" name="lat" required step="any" placeholder="-18.8792" />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="lon">Longitude *</label>
+                  <input type="number" id="lon" name="lon" required step="any" placeholder="47.5079" />
                 </div>
               </div>
               {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
               <div className="form-actions">
                 <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Création...' : 'Créer'}
+                  {createMutation.isPending ? 'Creation...' : 'Creer'}
                 </button>
               </div>
             </form>
@@ -140,11 +157,12 @@ export default function LotsPage() {
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Filière</th>
+                <th>Filiere</th>
                 <th>Type</th>
-                <th>Quantité</th>
-                <th>Unité</th>
+                <th>Quantite</th>
+                <th>Unite</th>
                 <th>Statut</th>
+                <th>Recu</th>
               </tr>
             </thead>
             <tbody>
@@ -159,16 +177,17 @@ export default function LotsPage() {
                     <td>
                       <span className={`status-badge status-${lot.status}`}>{lot.status}</span>
                     </td>
+                    <td>{lot.declaration_receipt_number ?? '—'}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state-rich">
                       <div className="empty-title">Aucun lot</div>
-                      <p className="empty-desc">La déclaration de lot est l'étape 2 : après avoir inscrit des acteurs, déclarez un lot (filière, type, quantité) pour qu'il puisse être vendu dans une transaction.</p>
+                      <p className="empty-desc">Declarez un lot pour pouvoir vendre.</p>
                       <button type="button" className="btn-primary" onClick={() => setShowForm(true)}>
-                        + Déclarer un lot
+                        + Declarer un lot
                       </button>
                     </div>
                   </td>
@@ -188,7 +207,7 @@ export default function LotsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                Précédent
+                Precedent
               </button>
               <button
                 className="btn-secondary"

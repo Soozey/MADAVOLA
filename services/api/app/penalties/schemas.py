@@ -5,6 +5,8 @@ class PenaltyCreate(BaseModel):
     violation_case_id: int
     penalty_type: str
     amount: float | None = None
+    action_on_lot: str | None = None  # none | block | seize
+    seized_to_actor_id: int | None = None
 
 
 class PenaltyOut(BaseModel):
@@ -13,3 +15,4 @@ class PenaltyOut(BaseModel):
     penalty_type: str
     amount: float | None = None
     status: str
+    action_on_lot: str | None = None

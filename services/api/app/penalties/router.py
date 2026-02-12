@@ -6,6 +6,7 @@ from app.audit.logger import write_audit
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
+from app.models.lot import InventoryLedger, Lot
 from app.models.actor import ActorRole
 from app.models.penalty import Penalty, ViolationCase
 from app.penalties.schemas import PenaltyCreate, PenaltyOut
@@ -33,13 +34,54 @@ def create_penalty(
     )
     db.add(penalty)
     db.flush()
+    if payload.action_on_lot in {"block", "seize"}:
+        inspection = violation.inspection
+        if not inspection or not inspection.inspected_lot_id:
+            raise bad_request("lot_introuvable")
+        lot = db.query(Lot).filter_by(id=inspection.inspected_lot_id).first()
+        if not lot:
+            raise bad_request("lot_introuvable")
+        if payload.action_on_lot == "block":
+            lot.status = "blocked"
+            violation.status = "sanctioned"
+            violation.lot_action_status = "blocked"
+        else:
+            previous_owner = lot.current_owner_actor_id
+            lot.current_owner_actor_id = payload.seized_to_actor_id or current_actor.id
+            lot.status = "seized"
+            violation.status = "sanctioned"
+            violation.lot_action_status = "seized"
+            db.add(
+                InventoryLedger(
+                    actor_id=previous_owner,
+                    lot_id=lot.id,
+                    movement_type="seizure_out",
+                    quantity_delta=-lot.quantity,
+                    ref_event_type="penalty",
+                    ref_event_id=str(penalty.id),
+                )
+            )
+            db.add(
+                InventoryLedger(
+                    actor_id=lot.current_owner_actor_id,
+                    lot_id=lot.id,
+                    movement_type="seizure_in",
+                    quantity_delta=lot.quantity,
+                    ref_event_type="penalty",
+                    ref_event_id=str(penalty.id),
+                )
+            )
     write_audit(
         db,
         actor_id=current_actor.id,
         action="penalty_created",
         entity_type="penalty",
         entity_id=str(penalty.id),
-        meta={"violation_case_id": payload.violation_case_id},
+        meta={
+            "violation_case_id": payload.violation_case_id,
+            "action_on_lot": payload.action_on_lot,
+            "seized_to_actor_id": payload.seized_to_actor_id,
+        },
     )
     db.commit()
     db.refresh(penalty)
@@ -49,6 +91,7 @@ def create_penalty(
         penalty_type=penalty.penalty_type,
         amount=float(penalty.amount) if penalty.amount is not None else None,
         status=penalty.status,
+        action_on_lot=payload.action_on_lot,
     )
 
 
@@ -71,6 +114,7 @@ def list_penalties(
             penalty_type=p.penalty_type,
             amount=float(p.amount) if p.amount is not None else None,
             status=p.status,
+            action_on_lot=None,
         )
         for p in penalties
     ]

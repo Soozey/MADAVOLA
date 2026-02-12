@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_actor
+from app.auth.dependencies import get_current_actor, get_optional_actor
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
-from app.fees.schemas import FeeCreate, FeeOut
+from app.fees.schemas import FeeCreate, FeeOut, FeePaymentInitiate, FeePaymentOut
 from app.models.actor import Actor, ActorRole
 from app.models.fee import Fee
+from app.models.payment import Payment, PaymentProvider, PaymentRequest
 from app.models.territory import Commune
 
 router = APIRouter(prefix=f"{settings.api_prefix}/fees", tags=["fees"])
@@ -61,6 +62,7 @@ def create_fee(
         amount=float(fee.amount),
         currency=fee.currency,
         status=fee.status,
+        commune_mobile_money_msisdn=commune.mobile_money_msisdn if commune else None,
     )
 
 
@@ -93,6 +95,7 @@ def list_fees(
             amount=float(fee.amount),
             currency=fee.currency,
             status=fee.status,
+            commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
         )
         for fee in fees
     ]
@@ -123,6 +126,72 @@ def get_fee(
         amount=float(fee.amount),
         currency=fee.currency,
         status=fee.status,
+        commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+    )
+
+
+@router.post("/{fee_id}/initiate-payment", response_model=FeePaymentOut, status_code=201)
+def initiate_opening_fee_payment(
+    fee_id: int,
+    payload: FeePaymentInitiate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_optional_actor),
+):
+    fee = db.query(Fee).filter_by(id=fee_id).first()
+    if not fee:
+        raise bad_request("frais_introuvable")
+    if fee.status != "pending":
+        raise bad_request("frais_invalide")
+    if current_actor and not _is_admin(db, current_actor.id) and fee.actor_id != current_actor.id:
+        raise bad_request("acces_refuse")
+
+    provider = db.query(PaymentProvider).filter_by(code=payload.provider_code).first()
+    if not provider or not provider.enabled:
+        raise bad_request("provider_indisponible")
+
+    commune = db.query(Commune).filter_by(id=fee.commune_id).first()
+    if not commune or not commune.mobile_money_msisdn:
+        raise bad_request("beneficiaire_communal_introuvable")
+
+    if payload.external_ref:
+        existing = db.query(PaymentRequest).filter_by(external_ref=payload.external_ref).first()
+        if existing:
+            payment = db.query(Payment).filter_by(payment_request_id=existing.id).first()
+            return FeePaymentOut(
+                payment_request_id=existing.id,
+                payment_id=payment.id if payment else 0,
+                status=existing.status,
+                external_ref=existing.external_ref,
+                beneficiary_label=existing.beneficiary_label,
+                beneficiary_msisdn=existing.beneficiary_msisdn,
+            )
+
+    external_ref = payload.external_ref or f"fee-{fee.id}"
+    request = PaymentRequest(
+        provider_id=provider.id,
+        payer_actor_id=fee.actor_id,
+        payee_actor_id=fee.actor_id,
+        fee_id=fee.id,
+        amount=fee.amount,
+        currency=fee.currency,
+        status="pending",
+        external_ref=external_ref,
+        idempotency_key=payload.idempotency_key,
+        beneficiary_label=f"Commune {commune.code}",
+        beneficiary_msisdn=commune.mobile_money_msisdn,
+    )
+    db.add(request)
+    db.flush()
+    payment = Payment(payment_request_id=request.id, status="pending")
+    db.add(payment)
+    db.commit()
+    return FeePaymentOut(
+        payment_request_id=request.id,
+        payment_id=payment.id,
+        status=request.status,
+        external_ref=request.external_ref,
+        beneficiary_label=request.beneficiary_label,
+        beneficiary_msisdn=request.beneficiary_msisdn,
     )
 
 
@@ -142,3 +211,8 @@ def _is_commune_agent(db: Session, actor_id: int) -> bool:
         .first()
         is not None
     )
+
+
+def _get_commune_msisdn(db: Session, commune_id: int) -> str | None:
+    commune = db.query(Commune).filter_by(id=commune_id).first()
+    return commune.mobile_money_msisdn if commune else None

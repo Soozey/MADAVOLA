@@ -16,3 +16,4 @@ class Invoice(Base):
     issue_date = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     total_amount = Column(Numeric(14, 2), nullable=False)
     status = Column(String(20), nullable=False, default="issued")
+    qr_code = Column(String(255), unique=True)

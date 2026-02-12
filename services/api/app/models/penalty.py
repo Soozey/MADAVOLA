@@ -29,6 +29,7 @@ class ViolationCase(Base):
     violation_type = Column(String(50), nullable=False)
     legal_basis_ref = Column(String(100))
     status = Column(String(20), nullable=False, default="open")
+    lot_action_status = Column(String(20))
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     inspection = relationship("Inspection")

@@ -13,3 +13,4 @@ class ViolationOut(BaseModel):
     violation_type: str
     legal_basis_ref: str | None = None
     status: str
+    lot_action_status: str | None = None

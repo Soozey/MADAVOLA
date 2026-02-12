@@ -11,8 +11,13 @@ class ExportDossier(Base):
 
     id = Column(Integer, primary_key=True)
     status = Column(String(20), nullable=False, default="draft")
+    dossier_number = Column(String(50), unique=True)
     destination = Column(String(100))
+    destination_country = Column(String(100))
+    transport_mode = Column(String(50))
     total_weight = Column(Numeric(14, 4))
+    declared_value = Column(Numeric(14, 2))
+    sealed_qr = Column(String(255))
     created_by_actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

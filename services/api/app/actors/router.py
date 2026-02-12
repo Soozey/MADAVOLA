@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.db import get_db
 from app.audit.logger import write_audit
 from app.models.actor import Actor, ActorAuth, ActorRole
+from app.models.fee import Fee
 from app.models.geo import GeoPoint
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
 from app.actors.schemas import ActorCreate, ActorOut, ActorStatusUpdate
@@ -114,6 +115,18 @@ def create_actor(
     for role in roles:
         db.add(ActorRole(actor_id=actor.id, role=role, status="active"))
 
+    opening_fee = None
+    if any(r in {"orpailleur", "collecteur"} for r in roles):
+        opening_fee = Fee(
+            fee_type="account_opening_commune",
+            actor_id=actor.id,
+            commune_id=commune.id,
+            amount=10000,
+            currency="MGA",
+            status="pending",
+        )
+        db.add(opening_fee)
+
     geo_point.actor_id = actor.id
     write_audit(
         db,
@@ -138,6 +151,8 @@ def create_actor(
         district_code=district.code,
         commune_code=commune.code,
         fokontany_code=fokontany.code if fokontany else None,
+        opening_fee_id=opening_fee.id if opening_fee else None,
+        opening_fee_status=opening_fee.status if opening_fee else None,
     )
 
 
@@ -172,6 +187,8 @@ def get_actor(
         district_code=district.code if district else "",
         commune_code=commune.code if commune else "",
         fokontany_code=fokontany.code if fokontany else None,
+        opening_fee_id=_get_opening_fee_id(db, actor.id),
+        opening_fee_status=_get_opening_fee_status(db, actor.id),
     )
 
 
@@ -244,6 +261,8 @@ def update_actor_status(
         district_code=district.code if district else "",
         commune_code=commune.code if commune else "",
         fokontany_code=fokontany.code if fokontany else None,
+        opening_fee_id=_get_opening_fee_id(db, actor.id),
+        opening_fee_status=_get_opening_fee_status(db, actor.id),
     )
 
 
@@ -305,6 +324,8 @@ def list_actors(
                 district_code=district.code if district else "",
                 commune_code=commune.code if commune else "",
                 fokontany_code=fokontany.code if fokontany else None,
+                opening_fee_id=_get_opening_fee_id(db, actor.id),
+                opening_fee_status=_get_opening_fee_status(db, actor.id),
             )
         )
     return results
@@ -326,3 +347,23 @@ def _is_commune_agent(db: Session, actor_id: int) -> bool:
         .first()
         is not None
     )
+
+
+def _get_opening_fee_id(db: Session, actor_id: int) -> int | None:
+    fee = (
+        db.query(Fee)
+        .filter(Fee.actor_id == actor_id, Fee.fee_type == "account_opening_commune")
+        .order_by(Fee.id.desc())
+        .first()
+    )
+    return fee.id if fee else None
+
+
+def _get_opening_fee_status(db: Session, actor_id: int) -> str | None:
+    fee = (
+        db.query(Fee)
+        .filter(Fee.actor_id == actor_id, Fee.fee_type == "account_opening_commune")
+        .order_by(Fee.id.desc())
+        .first()
+    )
+    return fee.status if fee else None

@@ -13,17 +13,20 @@ from app.db import get_db
 from app.audit.logger import write_audit
 from app.auth.dependencies import get_current_actor
 from app.models.actor import Actor, ActorRole
+from app.models.admin import SystemConfig
 from app.models.fee import Fee
 from app.models.invoice import Invoice
 from app.models.document import Document
+from app.models.lot import InventoryLedger, Lot
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
-from app.models.transaction import TradeTransaction
+from app.models.transaction import TradeTransaction, TradeTransactionItem
 from app.payments.schemas import (
     PaymentInitiate,
     PaymentInitiateResponse,
     PaymentRequestOut,
     WebhookPayload,
 )
+from app.common.receipts import build_qr_value
 
 router = APIRouter(prefix=f"{settings.api_prefix}/payments", tags=["payments"])
 
@@ -87,6 +90,8 @@ def initiate_payment(
         status="pending",
         external_ref=external_ref,
         idempotency_key=payload.idempotency_key,
+        beneficiary_label=None,
+        beneficiary_msisdn=None,
     )
     db.add(request)
     db.flush()
@@ -157,6 +162,7 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
         payment = db.query(Payment).filter_by(payment_request_id=payment_request.id).first()
         if payment:
             payment.status = parsed.status
+            payment.operator_ref = parsed.operator_ref
             if parsed.status == "success":
                 payment.confirmed_at = datetime.now(timezone.utc)
         if parsed.status == "success" and payment_request.fee_id:
@@ -166,7 +172,9 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
                 fee.paid_at = datetime.now(timezone.utc)
                 actor = db.query(Actor).filter_by(id=fee.actor_id).first()
                 if actor and actor.status == "pending":
-                    actor.status = "active"
+                    activation_mode = _get_signup_activation_mode(db)
+                    if activation_mode == "auto" and _has_minimal_signup_controls(actor):
+                        actor.status = "active"
                 write_audit(
                     db,
                     actor_id=fee.actor_id,
@@ -191,8 +199,10 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
                     buyer_actor_id=transaction.buyer_actor_id,
                     total_amount=transaction.total_amount,
                     status="issued",
+                    qr_code=build_qr_value("invoice", invoice_number),
                 )
                 db.add(invoice)
+                _apply_transaction_lot_transfer(db, transaction)
                 storage_dir = Path(settings.document_storage_dir)
                 storage_dir.mkdir(parents=True, exist_ok=True)
                 invoice_payload = {
@@ -278,6 +288,8 @@ def list_payments(
             currency=p.currency,
             status=p.status,
             external_ref=p.external_ref,
+            beneficiary_label=p.beneficiary_label,
+            beneficiary_msisdn=p.beneficiary_msisdn,
         )
         for p in payments
     ]
@@ -306,6 +318,8 @@ def get_payment(
         currency=payment.currency,
         status=payment.status,
         external_ref=payment.external_ref,
+        beneficiary_label=payment.beneficiary_label,
+        beneficiary_msisdn=payment.beneficiary_msisdn,
     )
 
 
@@ -332,6 +346,8 @@ def get_payment_status(
         currency=payment.currency,
         status=payment.status,
         external_ref=payment.external_ref,
+        beneficiary_label=payment.beneficiary_label,
+        beneficiary_msisdn=payment.beneficiary_msisdn,
     )
 
 
@@ -342,3 +358,80 @@ def _is_admin(db: Session, actor_id: int) -> bool:
         .first()
         is not None
     )
+
+
+def _get_signup_activation_mode(db: Session) -> str:
+    cfg = db.query(SystemConfig).filter(SystemConfig.key == "signup_activation_mode").first()
+    value = (cfg.value or "").strip().lower() if cfg else ""
+    if value in {"manual_commune", "manual"}:
+        return "manual_commune"
+    return "auto"
+
+
+def _has_minimal_signup_controls(actor: Actor) -> bool:
+    return bool(actor.region_id and actor.district_id and actor.commune_id and actor.signup_geo_point_id)
+
+
+def _apply_transaction_lot_transfer(db: Session, transaction: TradeTransaction) -> None:
+    items = (
+        db.query(TradeTransactionItem)
+        .filter(TradeTransactionItem.transaction_id == transaction.id)
+        .all()
+    )
+    for item in items:
+        if not item.lot_id:
+            continue
+        lot = db.query(Lot).filter(Lot.id == item.lot_id).first()
+        if not lot:
+            continue
+        if lot.current_owner_actor_id != transaction.seller_actor_id:
+            continue
+        qty = float(item.quantity)
+        lot_qty = float(lot.quantity)
+        if qty <= 0:
+            continue
+        if qty >= lot_qty:
+            lot.current_owner_actor_id = transaction.buyer_actor_id
+            lot.status = "available"
+            moved_qty = lot.quantity
+            moved_lot_id = lot.id
+        else:
+            lot.quantity = lot_qty - qty
+            child = Lot(
+                filiere=lot.filiere,
+                product_type=lot.product_type,
+                unit=lot.unit,
+                quantity=qty,
+                declared_by_actor_id=lot.declared_by_actor_id,
+                current_owner_actor_id=transaction.buyer_actor_id,
+                status="available",
+                declare_geo_point_id=lot.declare_geo_point_id,
+                parent_lot_id=lot.id,
+                notes=lot.notes,
+                photo_urls_json=lot.photo_urls_json,
+                qr_code=build_qr_value("lot", f"child-{transaction.id}-{lot.id}"),
+            )
+            db.add(child)
+            db.flush()
+            moved_qty = qty
+            moved_lot_id = child.id
+        db.add(
+            InventoryLedger(
+                actor_id=transaction.seller_actor_id,
+                lot_id=moved_lot_id,
+                movement_type="transfer_out",
+                quantity_delta=-moved_qty,
+                ref_event_type="transaction_payment",
+                ref_event_id=str(transaction.id),
+            )
+        )
+        db.add(
+            InventoryLedger(
+                actor_id=transaction.buyer_actor_id,
+                lot_id=moved_lot_id,
+                movement_type="transfer_in",
+                quantity_delta=moved_qty,
+                ref_event_type="transaction_payment",
+                ref_event_id=str(transaction.id),
+            )
+        )
