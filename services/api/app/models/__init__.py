@@ -10,4 +10,5 @@ from app.models import lot  # noqa: F401
 from app.models import payment  # noqa: F401
 from app.models import penalty  # noqa: F401
 from app.models import territory  # noqa: F401
+from app.models import tax  # noqa: F401
 from app.models import transaction  # noqa: F401

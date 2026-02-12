@@ -21,6 +21,7 @@ from app.penalties.router import router as penalties_router
 from app.reports.router import router as reports_router
 from app.roles.router import router as roles_router
 from app.territories.router import router as territories_router
+from app.taxes.router import router as taxes_router
 from app.transactions.router import router as transactions_router
 from app.verify.router import router as verify_router
 from app.violations.router import router as violations_router
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(reports_router)
     app.include_router(roles_router)
     app.include_router(territories_router)
+    app.include_router(taxes_router)
     app.include_router(transactions_router)
     app.include_router(verify_router)
     app.include_router(violations_router)

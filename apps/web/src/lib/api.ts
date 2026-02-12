@@ -313,6 +313,13 @@ class ApiClient {
     return response.data
   }
 
+  async getDtspmBreakdown(baseAmount: number, currency: string = 'MGA') {
+    const response = await this.client.get('/taxes/dtspm/breakdown', {
+      params: { base_amount: baseAmount, currency },
+    })
+    return response.data
+  }
+
   async getAuditLogs(params?: { actor_id?: number; entity_type?: string }) {
     const response = await this.client.get('/audit', { params })
     return response.data
