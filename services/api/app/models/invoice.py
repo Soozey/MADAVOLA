@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 
@@ -13,6 +13,6 @@ class Invoice(Base):
     transaction_id = Column(Integer, ForeignKey("trade_transactions.id"), nullable=False)
     seller_actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
     buyer_actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
-    issue_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    issue_date = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     total_amount = Column(Numeric(14, 2), nullable=False)
     status = Column(String(20), nullable=False, default="issued")

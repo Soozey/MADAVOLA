@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
@@ -30,7 +30,7 @@ class Actor(Base):
     territory_version_id = Column(Integer, ForeignKey("territory_versions.id"), nullable=False)
     signup_geo_point_id = Column(Integer, ForeignKey("geo_points.id"), nullable=True)
     status = Column(String(20), nullable=False, default="pending")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     roles = relationship("ActorRole", back_populates="actor")
     auth = relationship("ActorAuth", back_populates="actor", uselist=False)

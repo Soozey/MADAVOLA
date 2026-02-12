@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
@@ -14,7 +14,7 @@ class Lot(Base):
     product_type = Column(String(50), nullable=False)
     unit = Column(String(20), nullable=False)
     quantity = Column(Numeric(14, 4), nullable=False)
-    declared_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    declared_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     declared_by_actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
     current_owner_actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
     status = Column(String(20), nullable=False, default="available")
@@ -44,4 +44,4 @@ class InventoryLedger(Base):
     quantity_delta = Column(Numeric(14, 4), nullable=False)
     ref_event_type = Column(String(50), nullable=False)
     ref_event_id = Column(String(50), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

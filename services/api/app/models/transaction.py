@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
@@ -15,7 +15,7 @@ class TradeTransaction(Base):
     status = Column(String(20), nullable=False, default="pending_payment")
     total_amount = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(10), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     items = relationship("TradeTransactionItem", back_populates="transaction")
 

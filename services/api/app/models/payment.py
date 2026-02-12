@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
@@ -30,7 +30,7 @@ class PaymentRequest(Base):
     status = Column(String(20), nullable=False, default="pending")
     external_ref = Column(String(80), nullable=False, unique=True)
     idempotency_key = Column(String(80))
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     provider = relationship("PaymentProvider")
     fee = relationship("Fee", back_populates="payment_requests")
@@ -54,7 +54,7 @@ class WebhookInbox(Base):
     id = Column(Integer, primary_key=True)
     provider_id = Column(Integer, ForeignKey("payment_providers.id"), nullable=False)
     external_ref = Column(String(80), nullable=False)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     payload_hash = Column(String(64), nullable=False)
     status = Column(String(20), nullable=False, default="received")
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LoginRequest(BaseModel):
@@ -30,8 +30,7 @@ class ActorRoleInfo(BaseModel):
     valid_from: datetime | None
     valid_to: datetime | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ActorProfile(BaseModel):
@@ -53,5 +52,4 @@ class ActorProfile(BaseModel):
     roles: list[ActorRoleInfo]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

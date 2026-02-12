@@ -1,8 +1,8 @@
-from datetime import datetime, date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
 
 from app.auth.dependencies import get_current_actor, require_roles
 from app.audit.logger import write_audit
@@ -102,11 +102,7 @@ def list_exports(
 
     if not (is_admin or is_dirigeant):
         if is_commune_agent:
-            creator_ids = (
-                db.query(Actor.id)
-                .filter(Actor.commune_id == current_actor.commune_id)
-                .subquery()
-            )
+            creator_ids = select(Actor.id).where(Actor.commune_id == current_actor.commune_id)
             query = query.filter(ExportDossier.created_by_actor_id.in_(creator_ids))
         else:
             query = query.filter(ExportDossier.created_by_actor_id == current_actor.id)
@@ -168,7 +164,7 @@ def update_export_status(
 
     old_status = dossier.status
     dossier.status = payload.status
-    dossier.updated_at = datetime.utcnow()
+    dossier.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(dossier)
 

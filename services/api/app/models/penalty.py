@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
@@ -18,7 +18,7 @@ class Inspection(Base):
     reason_code = Column(String(50))
     notes = Column(String(255))
     geo_point_id = Column(Integer, ForeignKey("geo_points.id"))
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class ViolationCase(Base):
@@ -29,7 +29,7 @@ class ViolationCase(Base):
     violation_type = Column(String(50), nullable=False)
     legal_basis_ref = Column(String(100))
     status = Column(String(20), nullable=False, default="open")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     inspection = relationship("Inspection")
 

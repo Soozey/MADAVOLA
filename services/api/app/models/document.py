@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 
@@ -16,4 +16,4 @@ class Document(Base):
     storage_path = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     sha256 = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
