@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class ExportCreate(BaseModel):
     destination: str | None = None
+    destination_commune_id: int | None = None
     destination_country: str | None = None
     transport_mode: str | None = None
     total_weight: float | None = None
@@ -25,6 +26,7 @@ class ExportOut(BaseModel):
     status: str
     dossier_number: str | None = None
     destination: str | None = None
+    destination_commune_id: int | None = None
     destination_country: str | None = None
     transport_mode: str | None = None
     total_weight: float | None = None

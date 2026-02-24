@@ -7,7 +7,7 @@ type VerifyKind = 'actor' | 'lot' | 'invoice'
 type TabKey = 'actors' | 'lots' | 'trades' | 'exports' | 'transports' | 'transformations' | 'verify' | 'notifications'
 type EntryStep = 'login' | 'role' | 'filiere' | 'dashboard'
 type TerritoryOption = { code: string; name: string }
-type CommuneFlatOption = { code: string; name: string; district_code: string; region_code: string }
+type CommuneFlatOption = { id: number; code: string; name: string; district_code: string; region_code: string }
 type CardRequestKind = 'kara_orpailleur' | 'collector_collecteur' | 'collector_bijoutier'
 
 const API_BASE_URL =
@@ -69,8 +69,22 @@ export default function App() {
   const [myOrCards, setMyOrCards] = useState<any>({ kara_cards: [], collector_cards: [] })
   const [myFees, setMyFees] = useState<any[]>([])
   const [communeCardQueue, setCommuneCardQueue] = useState<any[]>([])
+  const [kycRecords, setKycRecords] = useState<any[]>([])
+  const [walletRecords, setWalletRecords] = useState<any[]>([])
+  const [communeProfile, setCommuneProfile] = useState<any>(null)
   const [cardRequestKind, setCardRequestKind] = useState<CardRequestKind>('kara_orpailleur')
   const [cardCin, setCardCin] = useState('')
+  const [kycPieces, setKycPieces] = useState('')
+  const [kycNote, setKycNote] = useState('')
+  const [walletProvider, setWalletProvider] = useState<'mobile_money' | 'bank' | 'card'>('mobile_money')
+  const [walletOperator, setWalletOperator] = useState('mvola')
+  const [walletRef, setWalletRef] = useState('')
+  const [walletPrimary, setWalletPrimary] = useState(true)
+  const [profileCommuneId, setProfileCommuneId] = useState<number>(0)
+  const [profileAccountRef, setProfileAccountRef] = useState('')
+  const [profileReceiverName, setProfileReceiverName] = useState('')
+  const [profileReceiverPhone, setProfileReceiverPhone] = useState('')
+  const [profileActive, setProfileActive] = useState(true)
   const [contextLoading, setContextLoading] = useState(false)
   const [emergencyForm, setEmergencyForm] = useState<any>({
     title: 'Alerte terrain',
@@ -258,6 +272,12 @@ export default function App() {
   const canValidateCommune = roleFromSession
     ? communeValidationRoles.includes(roleFromSession)
     : (me?.roles || []).some((r: any) => communeValidationRoles.includes(r.role))
+  const canManageCommuneProfile = roleFromSession
+    ? ['admin', 'dirigeant', 'commune', 'commune_agent', 'com', 'com_admin', 'com_agent'].includes(roleFromSession)
+    : (me?.roles || []).some((r: any) => ['admin', 'dirigeant', 'commune', 'commune_agent', 'com', 'com_admin', 'com_agent'].includes(r.role))
+  const canTargetAnyCommuneProfile = roleFromSession
+    ? ['admin', 'dirigeant', 'com', 'com_admin', 'com_agent'].includes(roleFromSession)
+    : (me?.roles || []).some((r: any) => ['admin', 'dirigeant', 'com', 'com_admin', 'com_agent'].includes(r.role))
 
   const refreshContext = async () => {
     if (!token) return
@@ -276,6 +296,13 @@ export default function App() {
         client.get('/fees', { params: { actor_id: meRes.data.id } }).catch(() => ({ data: [] })),
         client.get('/or-compliance/cards/commune-queue', { params: { status: 'pending', commune_id: meRes.data?.commune?.id } }).catch(() => ({ data: [] })),
       ])
+      const [kycRes, walletRes, communeProfileRes] = await Promise.all([
+        client.get(`/actors/${meRes.data.id}/kyc`).catch(() => ({ data: [] })),
+        client.get(`/actors/${meRes.data.id}/wallets`).catch(() => ({ data: [] })),
+        meRes.data?.commune?.id
+          ? client.get(`/actors/communes/${meRes.data.commune.id}/profile`).catch(() => ({ data: null }))
+          : Promise.resolve({ data: null }),
+      ])
       const actorsData = Array.isArray(actorsRes.data) ? actorsRes.data : actorsRes.data.items || []
       const lotsData = Array.isArray(lotsRes.data) ? lotsRes.data : lotsRes.data.items || []
       setActors(actorsData)
@@ -285,6 +312,17 @@ export default function App() {
       setMyOrCards(cardsRes.data || { kara_cards: [], collector_cards: [] })
       setMyFees(Array.isArray(feesRes.data) ? feesRes.data : [])
       setCommuneCardQueue(Array.isArray(queueRes.data) ? queueRes.data : [])
+      setKycRecords(Array.isArray(kycRes.data) ? kycRes.data : [])
+      setWalletRecords(Array.isArray(walletRes.data) ? walletRes.data : [])
+      setCommuneProfile(communeProfileRes.data || null)
+      const fallbackCommuneId = Number(meRes.data?.commune?.id || 0)
+      if (fallbackCommuneId && !profileCommuneId) setProfileCommuneId(fallbackCommuneId)
+      if (communeProfileRes.data) {
+        setProfileAccountRef(communeProfileRes.data.mobile_money_account_ref || '')
+        setProfileReceiverName(communeProfileRes.data.receiver_name || '')
+        setProfileReceiverPhone(communeProfileRes.data.receiver_phone || '')
+        setProfileActive(Boolean(communeProfileRes.data.active))
+      }
     } catch (e: any) {
       if (isInvalidTokenError(e)) {
         clearAuthSession('Session invalide/expiree. Veuillez vous reconnecter.')
@@ -571,6 +609,80 @@ export default function App() {
       await refreshContext()
     } catch (e: any) {
       showError(e, 'Echec validation carte')
+    }
+  }
+
+  const createKycRecord = async () => {
+    if (!token || !me?.id) return showError(null, "Connectez-vous d'abord")
+    const pieces = kycPieces
+      .split(',')
+      .map((x: string) => x.trim())
+      .filter(Boolean)
+    if (pieces.length === 0) return showError(null, 'Au moins une pièce KYC est obligatoire.')
+    setMessage('')
+    setMessageType('')
+    try {
+      await client.post(`/actors/${me.id}/kyc`, { pieces, note: kycNote || undefined })
+      setKycPieces('')
+      setKycNote('')
+      showSuccess('KYC ajouté.')
+      await refreshContext()
+    } catch (e: any) {
+      showError(e, 'Ajout KYC impossible')
+    }
+  }
+
+  const createWalletRecord = async () => {
+    if (!token || !me?.id) return showError(null, "Connectez-vous d'abord")
+    if (!walletRef.trim()) return showError(null, 'La référence wallet est obligatoire.')
+    setMessage('')
+    setMessageType('')
+    try {
+      await client.post(`/actors/${me.id}/wallets`, {
+        provider: walletProvider,
+        operator_name: walletOperator || undefined,
+        account_ref: walletRef.trim(),
+        is_primary: walletPrimary,
+      })
+      setWalletRef('')
+      showSuccess('Wallet ajouté.')
+      await refreshContext()
+    } catch (e: any) {
+      showError(e, 'Ajout wallet impossible')
+    }
+  }
+
+  const loadCommuneProfile = async (communeId: number) => {
+    if (!communeId) return
+    try {
+      const { data } = await client.get(`/actors/communes/${communeId}/profile`)
+      setCommuneProfile(data || null)
+      setProfileAccountRef(data?.mobile_money_account_ref || '')
+      setProfileReceiverName(data?.receiver_name || '')
+      setProfileReceiverPhone(data?.receiver_phone || '')
+      setProfileActive(Boolean(data?.active))
+    } catch (e: any) {
+      showError(e, 'Chargement profil commune impossible')
+    }
+  }
+
+  const saveCommuneProfile = async () => {
+    if (!canManageCommuneProfile) return showError(null, 'Action réservée aux rôles Commune/COM/Admin.')
+    const targetCommuneId = profileCommuneId || Number(me?.commune?.id || 0)
+    if (!targetCommuneId) return showError(null, 'Commune cible obligatoire.')
+    setMessage('')
+    setMessageType('')
+    try {
+      await client.patch(`/actors/communes/${targetCommuneId}/profile`, {
+        mobile_money_account_ref: profileAccountRef || undefined,
+        receiver_name: profileReceiverName || undefined,
+        receiver_phone: profileReceiverPhone || undefined,
+        active: profileActive,
+      })
+      showSuccess('Profil commune mis à jour.')
+      await loadCommuneProfile(targetCommuneId)
+    } catch (e: any) {
+      showError(e, 'Mise à jour profil commune impossible')
     }
   }
 
@@ -1065,6 +1177,92 @@ export default function App() {
             {(myOrCards.collector_cards || []).map((c: any) => <li key={`c-${c.id}`}>Collecteur #{c.id} | {c.status}</li>)}
             {(myOrCards.kara_cards || []).length === 0 && (myOrCards.collector_cards || []).length === 0 && <li>Aucune carte.</li>}
           </ul>
+
+          <h2 className="title" style={{ marginTop: 16 }}>KYC acteur</h2>
+          <div className="row">
+            <input
+              value={kycPieces}
+              onChange={(e) => setKycPieces(e.target.value)}
+              placeholder="Pièces CSV (cin_recto.jpg,cin_verso.jpg)"
+            />
+            <input
+              value={kycNote}
+              onChange={(e) => setKycNote(e.target.value)}
+              placeholder="Note KYC"
+            />
+            <button onClick={createKycRecord}>Ajouter KYC</button>
+          </div>
+          <ul>
+            {kycRecords.length === 0 && <li>Aucun KYC.</li>}
+            {kycRecords.map((k: any) => (
+              <li key={k.id}>#{k.id} | pièces={Array.isArray(k.pieces) ? k.pieces.join(', ') : '-'} | note={k.note || '-'}</li>
+            ))}
+          </ul>
+
+          <h2 className="title" style={{ marginTop: 16 }}>Wallets acteur</h2>
+          <div className="row">
+            <select value={walletProvider} onChange={(e) => setWalletProvider(e.target.value as 'mobile_money' | 'bank' | 'card')}>
+              <option value="mobile_money">mobile_money</option>
+              <option value="bank">bank</option>
+              <option value="card">card</option>
+            </select>
+            <input value={walletOperator} onChange={(e) => setWalletOperator(e.target.value)} placeholder="Opérateur" />
+            <input value={walletRef} onChange={(e) => setWalletRef(e.target.value)} placeholder="Référence wallet" />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={walletPrimary} onChange={(e) => setWalletPrimary(e.target.checked)} />
+              Principal
+            </label>
+            <button onClick={createWalletRecord}>Ajouter wallet</button>
+          </div>
+          <ul>
+            {walletRecords.length === 0 && <li>Aucun wallet.</li>}
+            {walletRecords.map((w: any) => (
+              <li key={w.id}>#{w.id} | {w.provider} | {w.account_ref} {w.is_primary ? '(principal)' : ''}</li>
+            ))}
+          </ul>
+
+          {canManageCommuneProfile && (
+            <>
+              <h2 className="title" style={{ marginTop: 16 }}>Profil commune</h2>
+              <div className="row">
+                <select
+                  value={profileCommuneId || ''}
+                  onChange={async (e) => {
+                    const nextId = Number(e.target.value) || 0
+                    setProfileCommuneId(nextId)
+                    if (nextId) await loadCommuneProfile(nextId)
+                  }}
+                  disabled={!canTargetAnyCommuneProfile}
+                >
+                  {!canTargetAnyCommuneProfile && <option value={me?.commune?.id || 0}>Commune du profil</option>}
+                  {canTargetAnyCommuneProfile && (
+                    <>
+                      <option value="">Commune cible</option>
+                      {transportCommunes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                <input value={profileAccountRef} onChange={(e) => setProfileAccountRef(e.target.value)} placeholder="Compte Mobile Money commune" />
+                <input value={profileReceiverName} onChange={(e) => setProfileReceiverName(e.target.value)} placeholder="Nom receveur" />
+                <input value={profileReceiverPhone} onChange={(e) => setProfileReceiverPhone(e.target.value)} placeholder="Téléphone receveur" />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={profileActive} onChange={(e) => setProfileActive(e.target.checked)} />
+                  Actif
+                </label>
+                <button onClick={saveCommuneProfile}>Enregistrer profil commune</button>
+              </div>
+              <ul>
+                {!communeProfile && <li>Aucun profil commune chargé.</li>}
+                {communeProfile && (
+                  <li>
+                    Commune #{communeProfile.commune_id} | {communeProfile.receiver_name || '-'} | {communeProfile.receiver_phone || '-'} | {communeProfile.mobile_money_account_ref || '-'}
+                  </li>
+                )}
+              </ul>
+            </>
+          )}
 
           {canValidateCommune && (
             <>

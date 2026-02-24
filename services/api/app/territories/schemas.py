@@ -24,6 +24,7 @@ class CommuneOut(BaseModel):
 
 
 class CommuneFlatOut(BaseModel):
+    id: int
     code: str
     name: str
     district_code: str

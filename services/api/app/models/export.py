@@ -13,6 +13,7 @@ class ExportDossier(Base):
     status = Column(String(20), nullable=False, default="draft")
     dossier_number = Column(String(50), unique=True)
     destination = Column(String(100))
+    destination_commune_id = Column(Integer, ForeignKey("communes.id"))
     destination_country = Column(String(100))
     transport_mode = Column(String(50))
     total_weight = Column(Numeric(14, 4))

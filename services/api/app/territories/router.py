@@ -167,6 +167,7 @@ def list_all_communes(db: Session = Depends(get_db)):
     )
     return [
         CommuneFlatOut(
+            id=commune.id,
             code=commune.code,
             name=commune.name,
             district_code=district.code,

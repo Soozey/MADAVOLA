@@ -47,6 +47,12 @@ export const MENU_ITEMS: MenuItem[] = [
     roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'mmrs', 'com', 'com_admin', 'com_agent', 'forets'],
   },
   {
+    path: '/account-ops',
+    label: 'KYC et wallets',
+    icon: 'KYC',
+    roles: ['admin', 'dirigeant', 'commune', 'commune_agent', 'com', 'com_admin', 'com_agent', 'acteur', 'orpailleur', 'collecteur', 'bijoutier'],
+  },
+  {
     path: '/lots',
     label: 'Lots',
     icon: 'LOT',
