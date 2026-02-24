@@ -8,6 +8,7 @@ from app.db import get_db
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
 from app.territories.importer import import_territory_excel
 from app.territories.schemas import (
+    CommuneFlatOut,
     CommuneOut,
     DistrictOut,
     FokontanyOut,
@@ -146,6 +147,33 @@ def list_communes(district_code: str, db: Session = Depends(get_db)):
             commune_mobile_money_msisdn=c.mobile_money_msisdn,
         )
         for c in communes
+    ]
+
+
+@router.get("/communes-all", response_model=list[CommuneFlatOut])
+def list_all_communes(db: Session = Depends(get_db)):
+    active = _get_active_version(db)
+    rows = (
+        db.query(Commune, District, Region)
+        .join(District, District.id == Commune.district_id)
+        .join(Region, Region.id == District.region_id)
+        .filter(
+            Commune.version_id == active.id,
+            District.version_id == active.id,
+            Region.version_id == active.id,
+        )
+        .order_by(Region.name.asc(), District.name.asc(), Commune.name.asc())
+        .all()
+    )
+    return [
+        CommuneFlatOut(
+            code=commune.code,
+            name=commune.name,
+            district_code=district.code,
+            region_code=region.code,
+            commune_mobile_money_msisdn=commune.mobile_money_msisdn,
+        )
+        for commune, district, region in rows
     ]
 
 

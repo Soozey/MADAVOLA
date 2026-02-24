@@ -5,11 +5,14 @@ from app.auth.dependencies import get_current_actor, get_optional_actor
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
-from app.fees.schemas import FeeCreate, FeeOut, FeePaymentInitiate, FeePaymentOut
+from datetime import datetime, timezone
+
+from app.fees.schemas import FeeActorMarkPaid, FeeCreate, FeeOut, FeePaymentInitiate, FeePaymentOut, FeeStatusUpdate
 from app.models.actor import Actor, ActorRole
 from app.models.fee import Fee
 from app.models.payment import Payment, PaymentProvider, PaymentRequest
-from app.models.territory import Commune
+from app.models.territory import Commune, TerritoryVersion
+from app.or_compliance.fee_split import allocate_collector_card_fee_split
 
 router = APIRouter(prefix=f"{settings.api_prefix}/fees", tags=["fees"])
 
@@ -25,7 +28,7 @@ def create_fee(
     actor = db.query(Actor).filter_by(id=payload.actor_id).first()
     if not actor:
         raise bad_request("acteur_invalide")
-    commune = db.query(Commune).filter_by(id=payload.commune_id).first()
+    commune = _get_active_commune_by_id(db, payload.commune_id)
     if not commune:
         raise bad_request("commune_invalide")
     if _is_commune_agent(db, current_actor.id) and current_actor.commune_id != payload.commune_id:
@@ -149,7 +152,7 @@ def initiate_opening_fee_payment(
     if not provider or not provider.enabled:
         raise bad_request("provider_indisponible")
 
-    commune = db.query(Commune).filter_by(id=fee.commune_id).first()
+    commune = _get_active_commune_by_id(db, fee.commune_id)
     if not commune or not commune.mobile_money_msisdn:
         raise bad_request("beneficiaire_communal_introuvable")
 
@@ -195,6 +198,74 @@ def initiate_opening_fee_payment(
     )
 
 
+@router.patch("/{fee_id}/status", response_model=FeeOut)
+def update_fee_status(
+    fee_id: int,
+    payload: FeeStatusUpdate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    fee = db.query(Fee).filter_by(id=fee_id).first()
+    if not fee:
+        raise bad_request("frais_introuvable")
+    if not _is_admin(db, current_actor.id) and not _is_commune_agent(db, current_actor.id):
+        raise bad_request("acces_refuse")
+    if _is_commune_agent(db, current_actor.id) and current_actor.commune_id != fee.commune_id:
+        raise bad_request("acces_refuse")
+
+    new_status = (payload.status or "").strip().lower()
+    if new_status not in {"pending", "paid", "cancelled"}:
+        raise bad_request("frais_invalide")
+    fee.status = new_status
+    fee.paid_at = datetime.now(timezone.utc) if new_status == "paid" else None
+    if new_status == "paid":
+        allocate_collector_card_fee_split(db, fee)
+    db.commit()
+    db.refresh(fee)
+    return FeeOut(
+        id=fee.id,
+        fee_type=fee.fee_type,
+        actor_id=fee.actor_id,
+        commune_id=fee.commune_id,
+        amount=float(fee.amount),
+        currency=fee.currency,
+        status=fee.status,
+        commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+    )
+
+
+@router.post("/{fee_id}/mark-paid", response_model=FeeOut)
+def actor_mark_fee_paid(
+    fee_id: int,
+    payload: FeeActorMarkPaid,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    fee = db.query(Fee).filter_by(id=fee_id).first()
+    if not fee:
+        raise bad_request("frais_introuvable")
+    if fee.actor_id != current_actor.id and not _is_admin(db, current_actor.id):
+        raise bad_request("acces_refuse")
+    if fee.status == "cancelled":
+        raise bad_request("frais_invalide")
+
+    fee.status = "paid"
+    fee.paid_at = datetime.now(timezone.utc)
+    allocate_collector_card_fee_split(db, fee)
+    db.commit()
+    db.refresh(fee)
+    return FeeOut(
+        id=fee.id,
+        fee_type=fee.fee_type,
+        actor_id=fee.actor_id,
+        commune_id=fee.commune_id,
+        amount=float(fee.amount),
+        currency=fee.currency,
+        status=fee.status,
+        commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+    )
+
+
 def _is_admin(db: Session, actor_id: int) -> bool:
     return (
         db.query(ActorRole)
@@ -214,5 +285,16 @@ def _is_commune_agent(db: Session, actor_id: int) -> bool:
 
 
 def _get_commune_msisdn(db: Session, commune_id: int) -> str | None:
-    commune = db.query(Commune).filter_by(id=commune_id).first()
+    commune = _get_active_commune_by_id(db, commune_id)
     return commune.mobile_money_msisdn if commune else None
+
+
+def _get_active_commune_by_id(db: Session, commune_id: int) -> Commune | None:
+    active = db.query(TerritoryVersion).filter_by(status="active").first()
+    if not active:
+        return None
+    return (
+        db.query(Commune)
+        .filter(Commune.id == commune_id, Commune.version_id == active.id)
+        .first()
+    )

@@ -60,6 +60,12 @@ def test_cascade_endpoints(client, db_session):
     assert communes[0]["district_code"] == "0101"
     assert communes[0]["commune_mobile_money_msisdn"] is None
 
+    all_communes = client.get("/api/v1/territories/communes-all").json()
+    assert len(all_communes) == 1
+    assert all_communes[0]["code"] == "010101"
+    assert all_communes[0]["district_code"] == "0101"
+    assert all_communes[0]["region_code"] == "01"
+
     fokontany = client.get("/api/v1/territories/fokontany?commune_code=010101").json()
     assert len(fokontany) == 1
     assert fokontany[0]["code"] == "010101-001"

@@ -7,6 +7,7 @@ type VerifyKind = 'actor' | 'lot' | 'invoice'
 type TabKey = 'actors' | 'lots' | 'trades' | 'exports' | 'transports' | 'transformations' | 'verify' | 'notifications'
 type EntryStep = 'login' | 'role' | 'filiere' | 'dashboard'
 type TerritoryOption = { code: string; name: string }
+type CommuneFlatOption = { code: string; name: string; district_code: string; region_code: string }
 type CardRequestKind = 'kara_orpailleur' | 'collector_collecteur' | 'collector_bijoutier'
 
 const API_BASE_URL =
@@ -61,6 +62,7 @@ export default function App() {
   const [districts, setDistricts] = useState<TerritoryOption[]>([])
   const [communes, setCommunes] = useState<TerritoryOption[]>([])
   const [fokontany, setFokontany] = useState<TerritoryOption[]>([])
+  const [transportCommunes, setTransportCommunes] = useState<CommuneFlatOption[]>([])
   const [territoriesLoading, setTerritoriesLoading] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
   const [emergencyAlerts, setEmergencyAlerts] = useState<any[]>([])
@@ -114,7 +116,7 @@ export default function App() {
 
   const [tradeForm, setTradeForm] = useState<any>({ seller_actor_id: '', buyer_actor_id: '', lot_id: '', quantity: '1', unit_price: '1000', trade_id: '' })
   const [exportForm, setExportForm] = useState<any>({ destination: 'EU', export_id: '', lot_id: '', qty: '1', step_code: 'mines', decision: 'approved', seal_number: '' })
-  const [transportForm, setTransportForm] = useState<any>({ transporter_actor_id: '', lot_id: '', quantity: '1', origin: 'A', destination: 'B', transport_id: '', verify_lot_id: '' })
+  const [transportForm, setTransportForm] = useState<any>({ transporter_actor_id: '', lot_id: '', quantity: '1', origin: '', destination: '', transport_id: '', verify_lot_id: '' })
   const [transformationForm, setTransformationForm] = useState<any>({ input_lot_ids: '', outputs: '1:m3:planche', operation_type: 'sciage' })
   const [verifyKind, setVerifyKind] = useState<VerifyKind>('actor')
   const [verifyValue, setVerifyValue] = useState('')
@@ -376,11 +378,26 @@ export default function App() {
     }
   }
 
+  const loadTransportCommunes = async () => {
+    if (!token) return
+    try {
+      const { data } = await client.get('/territories/communes-all')
+      setTransportCommunes(Array.isArray(data) ? data : [])
+    } catch (e: any) {
+      if (isInvalidTokenError(e)) {
+        clearAuthSession('Session invalide/expiree. Veuillez vous reconnecter.')
+        return
+      }
+      setTransportCommunes([])
+    }
+  }
+
   useEffect(() => {
     refreshContext()
     loadFiliereCatalog(actorForm.filiere)
     loadEntryRoles()
     loadTerritories()
+    loadTransportCommunes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
@@ -700,6 +717,12 @@ export default function App() {
   }
 
   const createTransport = async () => {
+    if (!transportForm.origin || !transportForm.destination) {
+      return showError(null, "Veuillez sélectionner l'origine et la destination (communes).")
+    }
+    if (!transportForm.transporter_actor_id || !transportForm.lot_id || Number(transportForm.quantity) <= 0) {
+      return showError(null, 'Transporteur, lot et quantité sont obligatoires.')
+    }
     setMessage('')
     setMessageType('')
     setDebug(null)
@@ -1175,9 +1198,20 @@ export default function App() {
               {lots.map((l: any) => <option key={l.id} value={l.id}>#{l.id} {l.filiere}</option>)}
             </select>
             <input placeholder="Quantité" value={transportForm.quantity} onChange={(e) => setTransportForm((p: any) => ({ ...p, quantity: e.target.value }))} />
-            <input placeholder="Origine" value={transportForm.origin} onChange={(e) => setTransportForm((p: any) => ({ ...p, origin: e.target.value }))} />
-            <input placeholder="Destination" value={transportForm.destination} onChange={(e) => setTransportForm((p: any) => ({ ...p, destination: e.target.value }))} />
-            <button onClick={createTransport}>Créer le transport</button>
+            <select value={transportForm.origin} onChange={(e) => setTransportForm((p: any) => ({ ...p, origin: e.target.value }))}>
+              <option value="">Origine (commune)</option>
+              {transportCommunes.map((c) => <option key={`o-${c.code}`} value={c.code}>{c.code} - {c.name}</option>)}
+            </select>
+            <select value={transportForm.destination} onChange={(e) => setTransportForm((p: any) => ({ ...p, destination: e.target.value }))}>
+              <option value="">Destination (commune)</option>
+              {transportCommunes.map((c) => <option key={`d-${c.code}`} value={c.code}>{c.code} - {c.name}</option>)}
+            </select>
+            <button
+              onClick={createTransport}
+              disabled={!transportForm.origin || !transportForm.destination || !transportForm.transporter_actor_id || !transportForm.lot_id}
+            >
+              Créer le transport
+            </button>
             <input placeholder="ID transport" value={transportForm.transport_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, transport_id: e.target.value }))} />
             <input placeholder="ID lot à vérifier" value={transportForm.verify_lot_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, verify_lot_id: e.target.value }))} />
             <button className="verify-cta" onClick={verifyTransport}>Vérifier le scan</button>

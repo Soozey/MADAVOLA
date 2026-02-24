@@ -23,6 +23,14 @@ class CommuneOut(BaseModel):
     commune_mobile_money_msisdn: Optional[str] = None
 
 
+class CommuneFlatOut(BaseModel):
+    code: str
+    name: str
+    district_code: str
+    region_code: str
+    commune_mobile_money_msisdn: Optional[str] = None
+
+
 class FokontanyOut(BaseModel):
     code: Optional[str] = None
     name: str
