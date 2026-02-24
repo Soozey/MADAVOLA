@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { api } from '../lib/api'
-import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useSession } from '../contexts/SessionContext'
 import { getApiDetailFromError, getApiErrorMessage } from '../lib/apiErrors'
+import { useToast } from '../contexts/ToastContext'
+import { buildRoleOptionsByFilieres } from '../utils/rbacOptions'
 import './ActorsPage.css'
 
-// Centre Madagascar (pour la carte)
 const DEFAULT_LAT = -18.8792
 const DEFAULT_LON = 47.5079
 
-// IcÃ´ne marqueur par dÃ©faut (Ã©viter 404 avec icÃ´nes Leaflet)
 const defaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -22,6 +22,8 @@ const defaultIcon = L.icon({
   iconAnchor: [12, 41],
 })
 
+const FILIERE_OPTIONS = ['OR', 'PIERRE', 'BOIS'] as const
+
 function MapClickHandler({ onSelect }: { onSelect: (lat: number, lon: number) => void }) {
   useMapEvents({
     click: (e) => onSelect(e.latlng.lat, e.latlng.lng),
@@ -29,13 +31,16 @@ function MapClickHandler({ onSelect }: { onSelect: (lat: number, lon: number) =>
   return null
 }
 
-const ROLES_OPTIONS = [
-  { value: 'acteur', label: 'Acteur' },
-  { value: 'orpailleur', label: 'Orpailleur' },
-  { value: 'collecteur', label: 'Collecteur' },
-  { value: 'comptoir_operator', label: 'Comptoir (Operateur)' },
-  { value: 'commune_agent', label: 'Agent commune' },
-]
+function defaultRoleFromSession(role: string | null): string {
+  const map: Record<string, string> = {
+    orpailleur: 'orpailleur',
+    collecteur: 'collecteur',
+    commune: 'commune_agent',
+    controleur: 'police',
+    comptoir: 'comptoir_operator',
+  }
+  return map[role ?? ''] ?? 'acteur'
+}
 
 export default function ActorsPage() {
   const [page, setPage] = useState(1)
@@ -46,38 +51,105 @@ export default function ActorsPage() {
   const [providerCode, setProviderCode] = useState('mvola')
   const [mapLat, setMapLat] = useState(DEFAULT_LAT)
   const [mapLon, setMapLon] = useState(DEFAULT_LON)
-  const queryClient = useQueryClient()
+  const { selectedRole, selectedFiliere } = useSession()
+  const [selectedRolesForCreate, setSelectedRolesForCreate] = useState<string[]>([
+    defaultRoleFromSession(selectedRole),
+  ])
+  const [selectedFilieresForCreate, setSelectedFilieresForCreate] = useState<string[]>([
+    (selectedFiliere ?? 'OR').toUpperCase(),
+  ])
+  const { data: rbacRoles = [], isLoading: rbacRolesLoading } = useQuery({
+    queryKey: ['rbac', 'roles', [...selectedFilieresForCreate].sort().join(',')],
+    queryFn: async () => {
+      const filieres = selectedFilieresForCreate.length ? selectedFilieresForCreate : ['OR']
+      const responses = await Promise.all(
+        filieres.map((f) => api.getRbacRoles({ filiere: f, include_common: true }))
+      )
+      return buildRoleOptionsByFilieres(
+        filieres,
+        responses.flat() as any[]
+      )
+    },
+    enabled: showForm,
+  })
+  const availableRoleOptions = rbacRoles
+
   const toast = useToast()
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const userRoles = user?.roles?.map((r) => r.role) ?? []
-  const effectiveRoles = userRoles
-  const canValidateActors = userRoles.some((r) => ['admin', 'dirigeant', 'commune_agent'].includes(r))
-  const showValidationSection = effectiveRoles.some((r) => ['admin', 'commune_agent'].includes(r))
+  const activeSessionRole = (selectedRole ?? '').toLowerCase()
+  const hasSessionRole = Boolean(activeSessionRole)
+  const validationRoles = ['commune', 'commune_agent', 'com', 'com_admin', 'com_agent']
+  const managementRoles = ['admin', 'dirigeant', ...validationRoles]
+  const fallbackCanManage = userRoles.some((r) => managementRoles.includes(r))
+  const fallbackCanValidate = userRoles.some((r) => validationRoles.includes(r))
+
+  // En mode demo multi-role, l'UI suit d'abord le role de session choisi
+  // pour eviter d'exposer des ecrans commune a un acteur terrain.
+  const canManageActors = hasSessionRole ? managementRoles.includes(activeSessionRole) : fallbackCanManage
+  const canValidateActors = hasSessionRole ? validationRoles.includes(activeSessionRole) : fallbackCanValidate
+  const showValidationSection = canValidateActors
+
+  const { data: activeTerritory } = useQuery({
+    queryKey: ['territories', 'active-version'],
+    queryFn: () => api.getActiveTerritoryVersion(),
+  })
+  const territoryVersionTag = activeTerritory?.version_tag ?? 'unknown'
+
   const { data: regions = [] } = useQuery({
-    queryKey: ['territories', 'regions'],
+    queryKey: ['territories', 'regions', territoryVersionTag],
     queryFn: () => api.getRegions(),
   })
+
   const { data: districts = [], isLoading: districtsLoading } = useQuery({
-    queryKey: ['territories', 'districts', regionCode],
+    queryKey: ['territories', 'districts', territoryVersionTag, regionCode],
     queryFn: () => api.getDistricts(regionCode),
     enabled: !!regionCode,
   })
+
   const { data: communes = [], isLoading: communesLoading } = useQuery({
-    queryKey: ['territories', 'communes', districtCode],
+    queryKey: ['territories', 'communes', territoryVersionTag, districtCode],
     queryFn: () => api.getCommunes(districtCode),
     enabled: !!districtCode,
   })
+
   const { data: fokontanyList = [] } = useQuery({
-    queryKey: ['territories', 'fokontany', communeCode],
+    queryKey: ['territories', 'fokontany', territoryVersionTag, communeCode],
     queryFn: () => api.getFokontany(communeCode),
     enabled: !!communeCode,
   })
+
   const selectedCommune = (communes as any[]).find((c: any) => c.code === communeCode)
 
   useEffect(() => {
     if (!regionCode) setDistrictCode('')
     if (!districtCode) setCommuneCode('')
   }, [regionCode, districtCode])
+
+  useEffect(() => {
+    const allowed = new Set(availableRoleOptions.map((r) => r.value))
+    setSelectedRolesForCreate((current) => {
+      const filtered = current.filter((r) => allowed.has(r))
+      if (filtered.length > 0) return filtered
+      const fallback = availableRoleOptions[0]?.value
+      return fallback ? [fallback] : []
+    })
+  }, [availableRoleOptions])
+
+  useEffect(() => {
+    if (!hasSessionRole || canManageActors) return
+    const preferred = availableRoleOptions.find((r) => r.value === activeSessionRole)?.value
+    if (preferred) {
+      setSelectedRolesForCreate([preferred])
+    }
+  }, [hasSessionRole, canManageActors, activeSessionRole, availableRoleOptions])
+
+  useEffect(() => {
+    if (!canManageActors && selectedFiliere) {
+      setSelectedFilieresForCreate([selectedFiliere.toUpperCase()])
+    }
+  }, [canManageActors, selectedFiliere])
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['actors', page],
@@ -95,14 +167,49 @@ export default function ActorsPage() {
   })
   const pendingList = Array.isArray(pendingActors) ? pendingActors : []
 
+  const { data: feesData = [] } = useQuery({
+    queryKey: ['fees'],
+    queryFn: () => api.getFees(),
+    enabled: canValidateActors && showValidationSection,
+  })
+
+  const latestOpeningFeeByActor = useMemo(() => {
+    const map = new Map<number, any>()
+    const fees = Array.isArray(feesData) ? feesData : []
+    fees
+      .filter((f: any) => f.fee_type === 'account_opening_commune')
+      .forEach((fee: any) => {
+        const prev = map.get(fee.actor_id)
+        if (!prev || fee.id > prev.id) map.set(fee.actor_id, fee)
+      })
+    return map
+  }, [feesData])
+
   const validateMutation = useMutation({
     mutationFn: ({ actorId, status }: { actorId: number; status: 'active' | 'rejected' }) =>
       api.updateActorStatus(actorId, status),
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ['actors'] })
-      toast.success(status === 'active' ? 'Acteur validÃ©.' : 'Acteur refusÃ©.')
+      queryClient.invalidateQueries({ queryKey: ['fees'] })
+      toast.success(status === 'active' ? 'Acteur valide.' : 'Acteur refuse.')
     },
-    onError: () => toast.error('Erreur lors de la validation.'),
+    onError: (error) => {
+      const detail = getApiDetailFromError(error)
+      toast.error(getApiErrorMessage(detail, 'Erreur lors de la validation.'))
+    },
+  })
+
+  const markFeePaidMutation = useMutation({
+    mutationFn: (feeId: number) => api.updateFeeStatus(feeId, 'paid'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fees'] })
+      queryClient.invalidateQueries({ queryKey: ['actors'] })
+      toast.success('Paiement marque comme recu. Vous pouvez valider le compte.')
+    },
+    onError: (error) => {
+      const detail = getApiDetailFromError(error)
+      toast.error(getApiErrorMessage(detail, 'Impossible de marquer le paiement.'))
+    },
   })
 
   const createMutation = useMutation({
@@ -120,6 +227,7 @@ export default function ActorsPage() {
       lat: number
       lon: number
       roles: string[]
+      filieres: string[]
     }) => {
       const geo = await api.createGeoPoint({
         lat: payload.lat,
@@ -140,31 +248,63 @@ export default function ActorsPage() {
         fokontany_code: payload.fokontany_code || undefined,
         geo_point_id: geo.id,
         roles: payload.roles,
+        filieres: payload.filieres,
       })
       if (actor.opening_fee_id) {
-        const payment = await api.initiateFeePayment(actor.opening_fee_id, {
-          provider_code: providerCode,
-          external_ref: `signup-fee-${actor.opening_fee_id}-${Date.now()}`,
-        })
-        return { actor, payment }
+        try {
+          const payment = await api.initiateFeePayment(actor.opening_fee_id, {
+            provider_code: providerCode,
+            external_ref: `signup-fee-${actor.opening_fee_id}-${Date.now()}`,
+          })
+          return { actor, payment, paymentInitFailed: false }
+        } catch {
+          return { actor, payment: null, paymentInitFailed: true }
+        }
       }
-      return { actor, payment: null }
+      return { actor, payment: null, paymentInitFailed: false }
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['actors'] })
+      queryClient.invalidateQueries({ queryKey: ['fees'] })
       setShowForm(false)
       if (result?.payment?.beneficiary_msisdn) {
-        toast.success(`Compte cree. Frais d'ouverture initie vers ${result.payment.beneficiary_msisdn}.`)
+        toast.success(`Compte cree. Paiement initie vers ${result.payment.beneficiary_msisdn}.`)
+      } else if (result?.paymentInitFailed) {
+        toast.success('Compte cree. Paiement non initialise automatiquement, validez via workflow commune.')
       } else {
-        toast.success("Acteur cree avec succes. L'acteur pourra se connecter apres validation/paiement.")
+        toast.success('Acteur cree avec succes.')
       }
+    },
+    onError: (error) => {
+      const detail = getApiDetailFromError(error)
+      toast.error(getApiErrorMessage(detail, "Erreur lors de la creation de l'acteur."))
     },
   })
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleRoleToggle = (roleCode: string) => {
+    setSelectedRolesForCreate((current) =>
+      current.includes(roleCode) ? current.filter((r) => r !== roleCode) : [...current, roleCode]
+    )
+  }
+
+  const handleFiliereToggle = (filiere: string) => {
+    setSelectedFilieresForCreate((current) =>
+      current.includes(filiere) ? current.filter((f) => f !== filiere) : [...current, filiere]
+    )
+  }
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    const fokontany = formData.get('fokontany_code') as string
+    if (selectedRolesForCreate.length === 0) {
+      toast.error('Selectionnez au moins un role.')
+      return
+    }
+    if (selectedFilieresForCreate.length === 0) {
+      toast.error('Selectionnez au moins une filiere.')
+      return
+    }
+
     createMutation.mutate({
       type_personne: (formData.get('type_personne') as string) || 'personne_physique',
       nom: formData.get('nom') as string,
@@ -175,56 +315,69 @@ export default function ActorsPage() {
       region_code: formData.get('region_code') as string,
       district_code: formData.get('district_code') as string,
       commune_code: formData.get('commune_code') as string,
-      fokontany_code: fokontany || '',
+      fokontany_code: (formData.get('fokontany_code') as string) || '',
       lat: mapLat,
       lon: mapLon,
-      roles: [(formData.get('roles') as string) || 'acteur'],
+      roles: selectedRolesForCreate,
+      filieres: selectedFilieresForCreate,
     })
   }
 
   const errorDetail = createMutation.isError ? getApiDetailFromError(createMutation.error) : null
   const errorMessage = createMutation.isError
-    ? getApiErrorMessage(errorDetail, "Erreur lors de la crÃ©ation de l'acteur.")
+    ? getApiErrorMessage(errorDetail, "Erreur lors de la creation de l'acteur.")
     : ''
-  const errorRaw =
-    createMutation.isError &&
-    errorDetail != null &&
-    typeof errorDetail === 'object' &&
-    !Array.isArray(errorDetail) &&
-    !('message' in (errorDetail as object))
-      ? JSON.stringify(errorDetail)
-      : null
 
-  const isOrpailleurOrActeur = effectiveRoles.some((r) => ['orpailleur', 'acteur'].includes(r))
-  const isMaireOrAdmin = showValidationSection
+  const actorFacingRoleSet = new Set([
+    'acteur', 'orpailleur', 'collecteur', 'bijoutier', 'transporteur', 'transporteur_agree',
+    'comptoir_operator', 'comptoir_compliance', 'comptoir_director',
+    'pierre_exploitant', 'pierre_collecteur', 'pierre_lapidaire', 'pierre_exportateur',
+    'bois_exploitant', 'bois_collecteur', 'bois_transporteur', 'bois_transformateur', 'bois_artisan', 'bois_exportateur',
+  ])
+  const isActorFacing = hasSessionRole ? actorFacingRoleSet.has(activeSessionRole) : userRoles.some((r) => actorFacingRoleSet.has(r))
+  const pageTitle = isActorFacing ? 'Mon parcours acteur' : 'Acteurs'
+  const activeCreateFiliere = (selectedFiliere ?? 'OR').toUpperCase() as (typeof FILIERE_OPTIONS)[number]
+  const roleOptionsForCreate = canManageActors
+    ? availableRoleOptions
+    : availableRoleOptions.filter((r) => r.value === activeSessionRole)
+  const filiereOptionsForCreate = canManageActors
+    ? FILIERE_OPTIONS
+    : FILIERE_OPTIONS.filter((f) => f === activeCreateFiliere)
 
-  if (canValidateActors && isLoading) return <div className="loading">Chargement...</div>
+  if (canManageActors && isLoading) return <div className="loading">Chargement...</div>
 
   return (
     <div className="actors-page">
       <div className="page-header">
-        <h1>
-          {isOrpailleurOrActeur ? 'CrÃ©ation ou modification de compte' : 'Acteurs'}
-        </h1>
+        <h1>{pageTitle}</h1>
         <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Annuler' : isOrpailleurOrActeur ? '+ CrÃ©er mon compte' : '+ Nouvel acteur'}
+          {showForm ? 'Annuler' : isActorFacing ? '+ Demander activation / mise a jour' : '+ Nouvel acteur'}
         </button>
       </div>
-      {isOrpailleurOrActeur && !showForm && (
-        <p className="role-hint">
-          En tant qu&apos;orpailleur ou acteur : crÃ©ez votre compte pour dÃ©clarer des lots et effectuer des transactions. Vous pouvez aussi modifier votre profil aprÃ¨s validation par la commune.
-        </p>
-      )}
-      {isMaireOrAdmin && !showForm && (
-        <p className="role-hint">
-          En tant que maire / agent commune : validez les inscriptions des nouveaux orpailleurs et acteurs de votre commune ciâ€‘dessous.
-        </p>
+
+      {!canManageActors && (
+        <div className="card">
+          <h2>Ce que vous pouvez faire</h2>
+          <p className="process-label">
+            Cet ecran est limite au parcours acteur. Les validations communales et la liste complete des demandes
+            sont reservees aux roles Commune/COM/Admin.
+          </p>
+          <ul className="home-list">
+            <li>Mettre a jour votre profil et votre rattachement territorial.</li>
+            <li>Soumettre une demande d'activation avec frais d'ouverture.</li>
+            <li>Suivre votre statut (pending/active) dans vos modules.</li>
+          </ul>
+        </div>
       )}
 
       {showValidationSection && (
         <div className="card validation-card">
-          <h2>En attente de validation</h2>
-          <p className="process-label">Nouveaux orpailleurs et acteurs inscrits dans votre commune. Validez ou refusez l&apos;inscription.</p>
+          <h2>Validation mairie/commune apres paiement</h2>
+          <div className="workflow-strip" aria-label="Etapes workflow">
+            <span className="workflow-step active">1. Creation compte</span>
+            <span className="workflow-step active">2. Paiement frais</span>
+            <span className="workflow-step">3. Validation commune/maire</span>
+          </div>
           {pendingLoading ? (
             <div className="loading">Chargement...</div>
           ) : pendingList.length === 0 ? (
@@ -236,39 +389,67 @@ export default function ActorsPage() {
                   <tr>
                     <th>ID</th>
                     <th>Nom</th>
-                    <th>Email</th>
-                    <th>TÃ©lÃ©phone</th>
+                    <th>Filieres</th>
+                    <th>Frais ouverture</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pendingList.map((actor: any) => (
-                    <tr key={actor.id}>
-                      <td><Link to={`/actors/${actor.id}`}>{actor.id}</Link></td>
-                      <td>{actor.nom} {actor.prenoms}</td>
-                      <td>{actor.email}</td>
-                      <td>{actor.telephone}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm"
-                          disabled={validateMutation.isPending}
-                          onClick={() => validateMutation.mutate({ actorId: actor.id, status: 'active' })}
-                        >
-                          Valider
-                        </button>
-                        {' '}
-                        <button
-                          type="button"
-                          className="btn-secondary btn-sm"
-                          disabled={validateMutation.isPending}
-                          onClick={() => validateMutation.mutate({ actorId: actor.id, status: 'rejected' })}
-                        >
-                          Refuser
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {pendingList.map((actor: any) => {
+                    const fee = latestOpeningFeeByActor.get(actor.id)
+                    const feeStatus = fee?.status ?? actor.opening_fee_status
+                    const requiresPaidFee = Boolean(actor.opening_fee_id)
+                    const canActivate = !requiresPaidFee || feeStatus === 'paid'
+                    return (
+                      <tr key={actor.id}>
+                        <td><Link to={`/actors/${actor.id}`}>{actor.id}</Link></td>
+                        <td>{actor.nom} {actor.prenoms}</td>
+                        <td>{Array.isArray(actor.filieres) && actor.filieres.length ? actor.filieres.join(', ') : 'OR'}</td>
+                        <td>
+                          <span className={`status-badge status-${feeStatus ?? 'pending'}`}>{feeStatus ?? 'pending'}</span>
+                          {fee?.id ? (
+                            <>
+                              {' '}
+                              <Link to={`/fees/${fee.id}`}>Voir frais</Link>
+                            </>
+                          ) : null}
+                        </td>
+                        <td>
+                          {fee?.id && feeStatus !== 'paid' && (
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => markFeePaidMutation.mutate(fee.id)}
+                              disabled={markFeePaidMutation.isPending}
+                            >
+                              Marquer paiement recu
+                            </button>
+                          )}
+                          {' '}
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm icon-action icon-action-approve"
+                            disabled={validateMutation.isPending || !canActivate}
+                            onClick={() => validateMutation.mutate({ actorId: actor.id, status: 'active' })}
+                            title={!canActivate ? "Paiement requis avant validation." : undefined}
+                            aria-label={`Valider acteur ${actor.id}`}
+                          >
+                            ✓
+                          </button>
+                          {' '}
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm icon-action icon-action-reject"
+                            disabled={validateMutation.isPending}
+                            onClick={() => validateMutation.mutate({ actorId: actor.id, status: 'rejected' })}
+                            aria-label={`Refuser acteur ${actor.id}`}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -278,12 +459,12 @@ export default function ActorsPage() {
 
       {showForm && (
         <div className="card form-card">
-          <h2>Inscription acteur</h2>
-          <p className="process-label">Ã‰tape 1 du processus : crÃ©er un acteur (collecteur, opÃ©rateur, orpailleur, etc.) avec localisation (RÃ©gion â†’ District â†’ Commune) et point GPS.</p>
+          <h2>Inscription acteur multi-role / multi-filiere</h2>
+          <p className="process-label">
+            L acteur peut etre rattache a plusieurs roles et plusieurs filieres des la creation.
+          </p>
           {regions.length === 0 ? (
-            <p className="form-warning">
-              Aucun territoire configurÃ©. VÃ©rifiez que le script create_admin a crÃ©Ã© un territoire par dÃ©faut (code DEFAULT).
-            </p>
+            <p className="form-warning">Aucun territoire configure. Chargez d abord le referentiel territorial.</p>
           ) : (
             <form onSubmit={handleSubmit}>
               <div className="form-grid">
@@ -299,7 +480,7 @@ export default function ActorsPage() {
                   <input type="text" id="nom" name="nom" required />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="prenoms">PrÃ©noms</label>
+                  <label htmlFor="prenoms">Prenoms</label>
                   <input type="text" id="prenoms" name="prenoms" />
                 </div>
                 <div className="form-group">
@@ -307,28 +488,20 @@ export default function ActorsPage() {
                   <input type="email" id="email" name="email" required />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="telephone">TÃ©lÃ©phone *</label>
+                  <label htmlFor="telephone">Telephone *</label>
                   <input type="tel" id="telephone" name="telephone" required placeholder="0340000000" />
-                  <span className="form-hint">Format : 03XXXXXXXX (10 chiffres, Madagascar)</span>
+                  <span className="form-hint">Format: 03XXXXXXXX</span>
                 </div>
                 <div className="form-group">
                   <label htmlFor="password">Mot de passe *</label>
                   <input type="password" id="password" name="password" required minLength={6} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="region_code">RÃ©gion *</label>
-                  <select
-                    id="region_code"
-                    name="region_code"
-                    required
-                    value={regionCode}
-                    onChange={(e) => setRegionCode(e.target.value)}
-                  >
-                    <option value="">â€” Choisir â€”</option>
+                  <label htmlFor="region_code">Region *</label>
+                  <select id="region_code" name="region_code" required value={regionCode} onChange={(e) => setRegionCode(e.target.value)}>
+                    <option value="">-- Choisir --</option>
                     {regions.map((r: { code: string; name: string }) => (
-                      <option key={r.code} value={r.code}>
-                        {r.name}
-                      </option>
+                      <option key={r.code} value={r.code}>{r.name}</option>
                     ))}
                   </select>
                 </div>
@@ -342,11 +515,9 @@ export default function ActorsPage() {
                     onChange={(e) => setDistrictCode(e.target.value)}
                     disabled={!regionCode || districtsLoading}
                   >
-                    <option value="">â€” Choisir â€”</option>
+                    <option value="">-- Choisir --</option>
                     {districts.map((d: { code: string; name: string }) => (
-                      <option key={d.code} value={d.code}>
-                        {d.name}
-                      </option>
+                      <option key={d.code} value={d.code}>{d.name}</option>
                     ))}
                   </select>
                 </div>
@@ -360,90 +531,91 @@ export default function ActorsPage() {
                     onChange={(e) => setCommuneCode(e.target.value)}
                     disabled={!districtCode || communesLoading}
                   >
-                    <option value="">â€” Choisir â€”</option>
+                    <option value="">-- Choisir --</option>
                     {communes.map((c: { code: string; name: string }) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name}
-                      </option>
+                      <option key={c.code} value={c.code}>{c.name}</option>
                     ))}
                   </select>
                   {selectedCommune?.commune_mobile_money_msisdn && (
                     <span className="form-hint">
-                      Beneficiaire communal (frais ouverture): {selectedCommune.commune_mobile_money_msisdn}
+                      Beneficiaire communal: {selectedCommune.commune_mobile_money_msisdn}
                     </span>
                   )}
                 </div>
                 <div className="form-group">
                   <label htmlFor="fokontany_code">Fokontany</label>
-                  <select
-                    id="fokontany_code"
-                    name="fokontany_code"
-                    disabled={!communeCode}
-                  >
-                    <option value="">â€” Optionnel â€”</option>
+                  <select id="fokontany_code" name="fokontany_code" disabled={!communeCode}>
+                    <option value="">-- Optionnel --</option>
                     {fokontanyList.map((f: { code?: string; name: string }) => (
-                      <option key={f.code ?? f.name} value={f.code ?? ''}>
-                        {f.name}
-                      </option>
+                      <option key={f.code ?? f.name} value={f.code ?? ''}>{f.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="roles">RÃ´le *</label>
-                  <select id="roles" name="roles" required defaultValue="acteur">
-                    {ROLES_OPTIONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
+                  <label>Roles (multi-selection) *</label>
+                  <div className="choice-inline-grid">
+                    {rbacRolesLoading ? (
+                      <p className="form-hint">Chargement des roles...</p>
+                    ) : roleOptionsForCreate.map((role) => (
+                      <label key={role.value} className="choice-inline">
+                        <input
+                          type="checkbox"
+                          checked={selectedRolesForCreate.includes(role.value)}
+                          disabled={!canManageActors}
+                          onChange={() => handleRoleToggle(role.value)}
+                        />
+                        <span>{role.label}</span>
+                      </label>
                     ))}
-                  </select>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Filieres (multi-selection) *</label>
+                  <div className="choice-inline-grid">
+                    {filiereOptionsForCreate.map((filiere) => (
+                      <label key={filiere} className="choice-inline">
+                        <input
+                          type="checkbox"
+                          checked={selectedFilieresForCreate.includes(filiere)}
+                          disabled={!canManageActors}
+                          onChange={() => handleFiliereToggle(filiere)}
+                        />
+                        <span>{filiere}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label htmlFor="provider_code">Paiement frais ouverture</label>
-                  <select
-                    id="provider_code"
-                    name="provider_code"
-                    value={providerCode}
-                    onChange={(e) => setProviderCode(e.target.value)}
-                  >
+                  <select id="provider_code" name="provider_code" value={providerCode} onChange={(e) => setProviderCode(e.target.value)}>
                     <option value="mvola">Mvola</option>
                     <option value="orange_money">Orange Money</option>
                     <option value="airtel_money">Airtel Money</option>
                   </select>
                 </div>
                 <div className="form-group form-group-map">
-                  <label>Lieu d&apos;inscription (cliquez sur la carte) *</label>
+                  <label>Lieu inscription (cliquez sur la carte) *</label>
                   <div className="map-wrapper">
-                    <MapContainer
-                      center={[mapLat, mapLon]}
-                      zoom={6}
-                      style={{ height: '280px', width: '100%' }}
-                      scrollWheelZoom
-                    >
+                    <MapContainer center={[mapLat, mapLon]} zoom={6} style={{ height: '280px', width: '100%' }} scrollWheelZoom>
                       <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       />
                       <MapClickHandler onSelect={(lat, lon) => { setMapLat(lat); setMapLon(lon) }} />
                       <Marker position={[mapLat, mapLon]} icon={defaultIcon}>
-                        <Popup>Lieu d&apos;inscription</Popup>
+                        <Popup>Lieu inscription</Popup>
                       </Marker>
                     </MapContainer>
                   </div>
                   <span className="form-hint">
-                    Latitude : {mapLat.toFixed(5)} â€” Longitude : {mapLon.toFixed(5)}
+                    Latitude: {mapLat.toFixed(5)} - Longitude: {mapLon.toFixed(5)}
                   </span>
                 </div>
               </div>
-              {errorMessage && (
-                <div className="alert alert-error">
-                  {errorMessage}
-                  {errorRaw && <pre className="error-detail">{errorRaw}</pre>}
-                </div>
-              )}
+              {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
               <div className="form-actions">
                 <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'CrÃ©ation...' : 'CrÃ©er'}
+                  {createMutation.isPending ? 'Creation...' : 'Creer'}
                 </button>
               </div>
             </form>
@@ -451,81 +623,62 @@ export default function ActorsPage() {
         </div>
       )}
 
-      {!canValidateActors && isOrpailleurOrActeur && !showForm && (
-        <div className="card role-empty-card">
-          <p>Pour crÃ©er votre compte orpailleur ou acteur, cliquez sur <strong>Â« CrÃ©er mon compte Â»</strong> ciâ€‘dessus. AprÃ¨s inscription, la commune validera votre compte.</p>
-        </div>
-      )}
-      {canValidateActors && (
-      <div className="card">
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nom</th>
-                <th>Email</th>
-                <th>TÃ©lÃ©phone</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.items?.length ? (
-                data.items.map((actor: any) => (
-                  <tr key={actor.id}>
-                    <td><Link to={`/actors/${actor.id}`}>{actor.id}</Link></td>
-                    <td>
-                      <Link to={`/actors/${actor.id}`}>{actor.nom} {actor.prenoms}</Link>
-                    </td>
-                    <td>{actor.email}</td>
-                    <td>{actor.telephone}</td>
-                    <td>
-                      <span className={`status-badge status-${actor.status}`}>
-                        {actor.status}
-                      </span>
+      {canManageActors && (
+        <div className="card">
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nom</th>
+                  <th>Email</th>
+                  <th>Telephone</th>
+                  <th>Filieres</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.items?.length ? (
+                  data.items.map((actor: any) => (
+                    <tr key={actor.id}>
+                      <td><Link to={`/actors/${actor.id}`}>{actor.id}</Link></td>
+                      <td><Link to={`/actors/${actor.id}`}>{actor.nom} {actor.prenoms}</Link></td>
+                      <td>{actor.email}</td>
+                      <td>{actor.telephone}</td>
+                      <td>{Array.isArray(actor.filieres) && actor.filieres.length ? actor.filieres.join(', ') : 'OR'}</td>
+                      <td><span className={`status-badge status-${actor.status}`}>{actor.status}</span></td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="empty-state-rich">
+                        <div className="empty-title">Aucun acteur</div>
+                        <p className="empty-desc">Inscrivez un acteur pour declencher le workflow creation, paiement, validation mairie.</p>
+                        <button type="button" className="btn-primary" onClick={() => setShowForm(true)}>
+                          + Inscrire un acteur
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="empty-state-rich">
-                      <div className="empty-title">Aucun acteur</div>
-                      <p className="empty-desc">L'inscription d'un acteur est la premiÃ¨re Ã©tape : crÃ©ez un acteur (collecteur, opÃ©rateur, etc.) pour qu'il puisse ensuite dÃ©clarer des lots et effectuer des transactions.</p>
-                      <button type="button" className="btn-primary" onClick={() => setShowForm(true)}>
-                        + Inscrire un acteur
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {data && data.total_pages > 1 && (
-          <div className="pagination">
-            <div className="pagination-info">
-              Page {data.page} sur {data.total_pages} ({data.total} total)
-            </div>
-            <div className="pagination-controls">
-              <button
-                className="btn-secondary"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                PrÃ©cÃ©dent
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page >= data.total_pages}
-              >
-                Suivant
-              </button>
-            </div>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+          {data && data.total_pages > 1 && (
+            <div className="pagination">
+              <div className="pagination-info">Page {data.page} sur {data.total_pages} ({data.total} total)</div>
+              <div className="pagination-controls">
+                <button className="btn-secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+                  Precedent
+                </button>
+                <button className="btn-secondary" onClick={() => setPage((p) => p + 1)} disabled={page >= data.total_pages}>
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

@@ -235,11 +235,27 @@ export default function App() {
     return ruleMap[tab].some((p) => rolePermissions.includes(p))
   }
 
+  const roleFromSession = (selectedRole || '').toLowerCase()
+  const communeValidationRoles = ['commune', 'commune_agent', 'com', 'com_admin', 'com_agent']
   const visibleTabs = (() => {
     const filtered = TABS.filter((t) => hasModuleAccess(t.key))
-    return filtered.length > 0 ? filtered : TABS
+    if (filtered.length > 0) return filtered
+    // Fallback par role de session pour eviter d'afficher tous les modules.
+    if (['admin', 'dirigeant'].includes(roleFromSession)) return TABS
+    if (communeValidationRoles.includes(roleFromSession)) {
+      return TABS.filter((t) => ['actors', 'notifications'].includes(t.key))
+    }
+    if (['police', 'gendarmerie', 'controleur', 'pierre_controleur_mines', 'bois_controleur'].includes(roleFromSession)) {
+      return TABS.filter((t) => ['verify', 'transports', 'notifications'].includes(t.key))
+    }
+    if (['comptoir_operator', 'comptoir_compliance', 'comptoir_director', 'bois_exportateur', 'pierre_exportateur'].includes(roleFromSession)) {
+      return TABS.filter((t) => ['lots', 'trades', 'exports', 'notifications'].includes(t.key))
+    }
+    return TABS.filter((t) => ['actors', 'lots', 'trades', 'notifications'].includes(t.key))
   })()
-  const canValidateCommune = (me?.roles || []).some((r: any) => ['admin', 'dirigeant', 'commune', 'commune_agent', 'com', 'com_admin', 'com_agent'].includes(r.role))
+  const canValidateCommune = roleFromSession
+    ? communeValidationRoles.includes(roleFromSession)
+    : (me?.roles || []).some((r: any) => communeValidationRoles.includes(r.role))
 
   const refreshContext = async () => {
     if (!token) return
