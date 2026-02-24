@@ -5,6 +5,7 @@ from app.models.actor import Actor, ActorAuth
 from app.models.fee import Fee
 from app.models.geo import GeoPoint
 from app.models.payment import PaymentProvider
+from app.models.pierre import FeePolicy
 from app.models.territory import Commune, District, Region, TerritoryVersion
 
 
@@ -78,6 +79,68 @@ def test_orpailleur_signup_creates_opening_fee(client, db_session):
     fee = db_session.query(Fee).filter_by(id=payload["opening_fee_id"]).first()
     assert fee is not None
     assert float(fee.amount) == 10000.0
+
+
+def test_orpailleur_signup_uses_fee_policy_amount(client, db_session):
+    region, district, commune, version = _seed_territory(db_session)
+    admin = Actor(
+        type_personne="physique",
+        nom="Admin",
+        prenoms="Policy",
+        telephone="0340099999",
+        email="admin.policy@example.com",
+        status="active",
+        region_id=region.id,
+        district_id=district.id,
+        commune_id=commune.id,
+        territory_version_id=version.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(admin)
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=admin.id, password_hash=hash_password("secret"), is_active=1))
+    db_session.add(
+        FeePolicy(
+            code="opening-fee-or-default",
+            filiere="OR",
+            commune_id=commune.id,
+            fee_type="account_opening_commune",
+            amount=12500,
+            currency="MGA",
+            legal_reference="demo",
+            effective_from=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            status="active",
+            created_by_actor_id=admin.id,
+        )
+    )
+    db_session.commit()
+
+    geo = client.post(
+        "/api/v1/geo-points",
+        json={"lat": -18.91, "lon": 47.52, "accuracy_m": 12, "source": "gps"},
+    ).json()
+    created = client.post(
+        "/api/v1/actors",
+        json={
+            "type_personne": "physique",
+            "nom": "Rakoto",
+            "prenoms": "Jean",
+            "telephone": "0340011009",
+            "email": "rakoto.policy@example.com",
+            "password": "secret",
+            "region_code": "01",
+            "district_code": "0101",
+            "commune_code": "010101",
+            "geo_point_id": geo["id"],
+            "roles": ["orpailleur"],
+            "filieres": ["OR"],
+        },
+    )
+    assert created.status_code == 201
+    payload = created.json()
+    fee = db_session.query(Fee).filter_by(id=payload["opening_fee_id"]).first()
+    assert fee is not None
+    assert float(fee.amount) == 12500.0
 
 
 def test_initiate_fee_payment_uses_commune_beneficiary(client, db_session):

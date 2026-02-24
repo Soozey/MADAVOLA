@@ -10,12 +10,15 @@ from app.core.config import settings
 from app.db import get_db
 from app.audit.logger import write_audit
 from app.models.actor import Actor, ActorAuth, ActorRole
+from app.models.actor_filiere import ActorFiliere
 from app.models.fee import Fee
 from app.models.geo import GeoPoint
+from app.models.pierre import FeePolicy
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
 from app.actors.schemas import ActorCreate, ActorOut, ActorStatusUpdate
 
 router = APIRouter(prefix=f"{settings.api_prefix}/actors", tags=["actors"])
+ALLOWED_FILIERES = {"OR", "PIERRE", "BOIS"}
 
 
 @router.post("", response_model=ActorOut, status_code=201)
@@ -112,16 +115,30 @@ def create_actor(
     roles = sorted(set(payload.roles))
     if not roles:
         raise bad_request("roles_obligatoires")
+    raw_filieres = payload.filieres or []
+    filieres = sorted({f.strip().upper() for f in raw_filieres if (f or "").strip()})
+    if not filieres:
+        filieres = ["OR"]
+    if any(f not in ALLOWED_FILIERES for f in filieres):
+        raise bad_request("filiere_invalide")
+
     for role in roles:
         db.add(ActorRole(actor_id=actor.id, role=role, status="active"))
+    for filiere in filieres:
+        db.add(ActorFiliere(actor_id=actor.id, filiere=filiere))
 
     opening_fee = None
-    if any(r in {"orpailleur", "collecteur"} for r in roles):
+    if any(r in {"orpailleur", "collecteur", "comptoir", "comptoir_operator"} for r in roles):
+        opening_fee_amount = _resolve_opening_fee_amount(
+            db=db,
+            commune_id=commune.id,
+            filiere=(filieres[0] if filieres else "OR"),
+        )
         opening_fee = Fee(
             fee_type="account_opening_commune",
             actor_id=actor.id,
             commune_id=commune.id,
-            amount=10000,
+            amount=opening_fee_amount,
             currency="MGA",
             status="pending",
         )
@@ -153,6 +170,10 @@ def create_actor(
         fokontany_code=fokontany.code if fokontany else None,
         opening_fee_id=opening_fee.id if opening_fee else None,
         opening_fee_status=opening_fee.status if opening_fee else None,
+        filieres=filieres,
+        laissez_passer_access_status=actor.laissez_passer_access_status,
+        agrement_status=actor.agrement_status,
+        sig_oc_access_status=actor.sig_oc_access_status,
     )
 
 
@@ -189,6 +210,10 @@ def get_actor(
         fokontany_code=fokontany.code if fokontany else None,
         opening_fee_id=_get_opening_fee_id(db, actor.id),
         opening_fee_status=_get_opening_fee_status(db, actor.id),
+        filieres=_get_actor_filieres(db, actor.id),
+        laissez_passer_access_status=actor.laissez_passer_access_status,
+        agrement_status=actor.agrement_status,
+        sig_oc_access_status=actor.sig_oc_access_status,
     )
 
 
@@ -229,6 +254,9 @@ def update_actor_status(
         raise bad_request("acces_refuse")
     if payload.status not in ("active", "rejected"):
         raise bad_request("acteur_invalide")
+    if payload.status == "active" and _requires_commune_fee_validation(db, actor.id):
+        if _get_opening_fee_status(db, actor.id) != "paid":
+            raise bad_request("frais_ouverture_non_payes")
     actor.status = payload.status
     write_audit(
         db,
@@ -263,12 +291,17 @@ def update_actor_status(
         fokontany_code=fokontany.code if fokontany else None,
         opening_fee_id=_get_opening_fee_id(db, actor.id),
         opening_fee_status=_get_opening_fee_status(db, actor.id),
+        filieres=_get_actor_filieres(db, actor.id),
+        laissez_passer_access_status=actor.laissez_passer_access_status,
+        agrement_status=actor.agrement_status,
+        sig_oc_access_status=actor.sig_oc_access_status,
     )
 
 
 @router.get("", response_model=list[ActorOut])
 def list_actors(
     role: str | None = None,
+    filiere: str | None = None,
     commune_code: str | None = None,
     status: str | None = None,
     db: Session = Depends(get_db),
@@ -289,6 +322,10 @@ def list_actors(
         query = query.filter(Actor.status == status)
     if role:
         query = query.join(ActorRole).filter(ActorRole.role == role)
+    if filiere:
+        query = query.join(ActorFiliere, ActorFiliere.actor_id == Actor.id).filter(
+            ActorFiliere.filiere == filiere.strip().upper()
+        )
 
     if commune_code:
         commune = (
@@ -300,7 +337,7 @@ def list_actors(
             return []
         query = query.filter(Actor.commune_id == commune.id)
 
-    actors = query.order_by(Actor.created_at.desc()).all()
+    actors = query.distinct().order_by(Actor.created_at.desc()).all()
     results = []
     for actor in actors:
         region = db.query(Region).filter_by(id=actor.region_id).first()
@@ -326,6 +363,10 @@ def list_actors(
                 fokontany_code=fokontany.code if fokontany else None,
                 opening_fee_id=_get_opening_fee_id(db, actor.id),
                 opening_fee_status=_get_opening_fee_status(db, actor.id),
+                filieres=_get_actor_filieres(db, actor.id),
+                laissez_passer_access_status=actor.laissez_passer_access_status,
+                agrement_status=actor.agrement_status,
+                sig_oc_access_status=actor.sig_oc_access_status,
             )
         )
     return results
@@ -367,3 +408,41 @@ def _get_opening_fee_status(db: Session, actor_id: int) -> str | None:
         .first()
     )
     return fee.status if fee else None
+
+
+def _get_actor_filieres(db: Session, actor_id: int) -> list[str]:
+    rows = (
+        db.query(ActorFiliere.filiere)
+        .filter(ActorFiliere.actor_id == actor_id)
+        .order_by(ActorFiliere.filiere.asc())
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _requires_commune_fee_validation(db: Session, actor_id: int) -> bool:
+    roles = (
+        db.query(ActorRole.role)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.status == "active")
+        .all()
+    )
+    role_codes = {r[0] for r in roles}
+    return any(role in {"orpailleur", "collecteur", "comptoir", "comptoir_operator"} for role in role_codes)
+
+
+def _resolve_opening_fee_amount(db: Session, commune_id: int, filiere: str) -> int:
+    now = datetime.now(timezone.utc)
+    policy = (
+        db.query(FeePolicy)
+        .filter(FeePolicy.fee_type == "account_opening_commune")
+        .filter(FeePolicy.filiere == (filiere or "OR").upper())
+        .filter(FeePolicy.status == "active")
+        .filter(FeePolicy.effective_from <= now)
+        .filter((FeePolicy.effective_to == None) | (FeePolicy.effective_to >= now))
+        .filter((FeePolicy.commune_id == commune_id) | (FeePolicy.commune_id == None))
+        .order_by(FeePolicy.commune_id.desc(), FeePolicy.effective_from.desc())
+        .first()
+    )
+    if policy:
+        return int(policy.amount)
+    return 10000

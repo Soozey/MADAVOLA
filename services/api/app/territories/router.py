@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import require_roles
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
@@ -19,7 +20,12 @@ router = APIRouter(prefix=f"{settings.api_prefix}/territories", tags=["territori
 
 
 @router.post("/import", response_model=TerritoryImportResult)
-def import_territory(version_tag: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+def import_territory(
+    version_tag: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _current_actor=Depends(require_roles({"admin", "dirigeant"})),
+):
     if not file.filename:
         raise bad_request("fichier_obligatoire")
     if not file.filename.lower().endswith((".xlsx", ".xlsm")):
