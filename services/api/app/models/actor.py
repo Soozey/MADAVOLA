@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base
@@ -30,10 +30,15 @@ class Actor(Base):
     territory_version_id = Column(Integer, ForeignKey("territory_versions.id"), nullable=False)
     signup_geo_point_id = Column(Integer, ForeignKey("geo_points.id"), nullable=True)
     status = Column(String(20), nullable=False, default="pending")
+    laissez_passer_access_status = Column(String(20), nullable=False, default="active")
+    agrement_status = Column(String(20), nullable=False, default="active")
+    sig_oc_access_status = Column(String(20), nullable=False, default="active")
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     roles = relationship("ActorRole", back_populates="actor")
     auth = relationship("ActorAuth", back_populates="actor", uselist=False)
+    kyc_records = relationship("ActorKYC", back_populates="actor", foreign_keys="ActorKYC.actor_id")
+    wallets = relationship("ActorWallet", back_populates="actor")
     # geo_points relationship removed temporarily due to ambiguous foreign key issue
     # Can be re-added later with proper foreign_keys specification if needed
 
@@ -70,3 +75,43 @@ class RefreshToken(Base):
     token_id = Column(String(64), nullable=False, unique=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked_at = Column(DateTime(timezone=True))
+
+
+class ActorKYC(Base):
+    __tablename__ = "actor_kyc"
+
+    id = Column(Integer, primary_key=True)
+    actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
+    pieces = Column(Text, nullable=False, default="[]")
+    verified_by = Column(Integer, ForeignKey("actors.id"))
+    verified_at = Column(DateTime(timezone=True))
+    note = Column(String(500))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    actor = relationship("Actor", foreign_keys=[actor_id], back_populates="kyc_records")
+
+
+class ActorWallet(Base):
+    __tablename__ = "actor_wallets"
+
+    id = Column(Integer, primary_key=True)
+    actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
+    provider = Column(String(30), nullable=False)  # mobile_money|bank|card
+    operator_name = Column(String(80))
+    account_ref = Column(String(120), nullable=False)
+    is_primary = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="active")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    actor = relationship("Actor", back_populates="wallets")
+
+
+class CommuneProfile(Base):
+    __tablename__ = "commune_profiles"
+
+    commune_id = Column(Integer, ForeignKey("communes.id"), primary_key=True)
+    mobile_money_account_ref = Column(String(120))
+    receiver_name = Column(String(120))
+    receiver_phone = Column(String(30))
+    active = Column(Integer, nullable=False, default=1)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

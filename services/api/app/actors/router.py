@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -9,13 +10,23 @@ from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
 from app.audit.logger import write_audit
-from app.models.actor import Actor, ActorAuth, ActorRole
+from app.models.actor import Actor, ActorAuth, ActorKYC, ActorRole, ActorWallet, CommuneProfile
 from app.models.actor_filiere import ActorFiliere
 from app.models.fee import Fee
 from app.models.geo import GeoPoint
 from app.models.pierre import FeePolicy
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
-from app.actors.schemas import ActorCreate, ActorOut, ActorStatusUpdate
+from app.actors.schemas import (
+    ActorCreate,
+    ActorKYCCreate,
+    ActorKYCOut,
+    ActorOut,
+    ActorStatusUpdate,
+    ActorWalletCreate,
+    ActorWalletOut,
+    CommuneProfileOut,
+    CommuneProfilePatch,
+)
 
 router = APIRouter(prefix=f"{settings.api_prefix}/actors", tags=["actors"])
 ALLOWED_FILIERES = {"OR", "PIERRE", "BOIS"}
@@ -446,3 +457,206 @@ def _resolve_opening_fee_amount(db: Session, commune_id: int, filiere: str) -> i
     if policy:
         return int(policy.amount)
     return 10000
+
+
+@router.post("/{actor_id}/kyc", response_model=ActorKYCOut, status_code=201)
+def create_actor_kyc(
+    actor_id: int,
+    payload: ActorKYCCreate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    if not actor:
+        raise bad_request("acteur_introuvable")
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor_id:
+        if not (_is_commune_agent(db, current_actor.id) and current_actor.commune_id == actor.commune_id):
+            raise bad_request("acces_refuse")
+    row = ActorKYC(
+        actor_id=actor_id,
+        pieces=json.dumps(payload.pieces or []),
+        note=payload.note,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return ActorKYCOut(
+        id=row.id,
+        actor_id=row.actor_id,
+        pieces=_parse_kyc_pieces(row.pieces),
+        verified_by=row.verified_by,
+        verified_at=row.verified_at.isoformat() if row.verified_at else None,
+        note=row.note,
+    )
+
+
+@router.get("/{actor_id}/kyc", response_model=list[ActorKYCOut])
+def list_actor_kyc(
+    actor_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    if not actor:
+        raise bad_request("acteur_introuvable")
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor_id:
+        if not (_is_commune_agent(db, current_actor.id) and current_actor.commune_id == actor.commune_id):
+            raise bad_request("acces_refuse")
+    rows = db.query(ActorKYC).filter(ActorKYC.actor_id == actor_id).order_by(ActorKYC.id.desc()).all()
+    return [
+        ActorKYCOut(
+            id=row.id,
+            actor_id=row.actor_id,
+            pieces=_parse_kyc_pieces(row.pieces),
+            verified_by=row.verified_by,
+            verified_at=row.verified_at.isoformat() if row.verified_at else None,
+            note=row.note,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/{actor_id}/wallets", response_model=ActorWalletOut, status_code=201)
+def create_actor_wallet(
+    actor_id: int,
+    payload: ActorWalletCreate,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    if not actor:
+        raise bad_request("acteur_introuvable")
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor_id:
+        raise bad_request("acces_refuse")
+    if payload.provider not in {"mobile_money", "bank", "card"}:
+        raise bad_request("provider_invalide")
+    if payload.is_primary:
+        db.query(ActorWallet).filter(ActorWallet.actor_id == actor_id, ActorWallet.status == "active").update(
+            {"is_primary": 0}
+        )
+    row = ActorWallet(
+        actor_id=actor_id,
+        provider=payload.provider,
+        operator_name=payload.operator_name,
+        account_ref=payload.account_ref,
+        is_primary=1 if payload.is_primary else 0,
+        status="active",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return ActorWalletOut(
+        id=row.id,
+        actor_id=row.actor_id,
+        provider=row.provider,
+        operator_name=row.operator_name,
+        account_ref=row.account_ref,
+        is_primary=bool(row.is_primary),
+        status=row.status,
+    )
+
+
+@router.get("/{actor_id}/wallets", response_model=list[ActorWalletOut])
+def list_actor_wallets(
+    actor_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor_id:
+        raise bad_request("acces_refuse")
+    rows = (
+        db.query(ActorWallet)
+        .filter(ActorWallet.actor_id == actor_id)
+        .order_by(ActorWallet.is_primary.desc(), ActorWallet.id.desc())
+        .all()
+    )
+    return [
+        ActorWalletOut(
+            id=row.id,
+            actor_id=row.actor_id,
+            provider=row.provider,
+            operator_name=row.operator_name,
+            account_ref=row.account_ref,
+            is_primary=bool(row.is_primary),
+            status=row.status,
+        )
+        for row in rows
+    ]
+
+
+@router.patch("/communes/{commune_id}/profile", response_model=CommuneProfileOut)
+def patch_commune_profile(
+    commune_id: int,
+    payload: CommuneProfilePatch,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    if not _is_admin(db, current_actor.id) and not _is_commune_agent(db, current_actor.id):
+        raise bad_request("acces_refuse")
+    if _is_commune_agent(db, current_actor.id) and current_actor.commune_id != commune_id:
+        raise bad_request("acces_refuse")
+
+    commune = db.query(Commune).filter(Commune.id == commune_id).first()
+    if not commune:
+        raise bad_request("commune_invalide")
+    row = db.query(CommuneProfile).filter(CommuneProfile.commune_id == commune_id).first()
+    if not row:
+        row = CommuneProfile(commune_id=commune_id)
+        db.add(row)
+        db.flush()
+    if payload.mobile_money_account_ref is not None:
+        row.mobile_money_account_ref = payload.mobile_money_account_ref
+    if payload.receiver_name is not None:
+        row.receiver_name = payload.receiver_name
+    if payload.receiver_phone is not None:
+        row.receiver_phone = payload.receiver_phone
+    if payload.active is not None:
+        row.active = 1 if payload.active else 0
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return CommuneProfileOut(
+        commune_id=row.commune_id,
+        mobile_money_account_ref=row.mobile_money_account_ref,
+        receiver_name=row.receiver_name,
+        receiver_phone=row.receiver_phone,
+        active=bool(row.active),
+    )
+
+
+@router.get("/communes/{commune_id}/profile", response_model=CommuneProfileOut)
+def get_commune_profile(
+    commune_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    if not _is_admin(db, current_actor.id) and not _is_commune_agent(db, current_actor.id):
+        raise bad_request("acces_refuse")
+    if _is_commune_agent(db, current_actor.id) and current_actor.commune_id != commune_id:
+        raise bad_request("acces_refuse")
+    row = db.query(CommuneProfile).filter(CommuneProfile.commune_id == commune_id).first()
+    if not row:
+        return CommuneProfileOut(
+            commune_id=commune_id,
+            mobile_money_account_ref=None,
+            receiver_name=None,
+            receiver_phone=None,
+            active=True,
+        )
+    return CommuneProfileOut(
+        commune_id=row.commune_id,
+        mobile_money_account_ref=row.mobile_money_account_ref,
+        receiver_name=row.receiver_name,
+        receiver_phone=row.receiver_phone,
+        active=bool(row.active),
+    )
+
+
+def _parse_kyc_pieces(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+    return [str(x) for x in parsed] if isinstance(parsed, list) else []

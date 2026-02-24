@@ -118,6 +118,42 @@ class ApiClient {
     return response.data
   }
 
+  async getActorKyc(actorId: number) {
+    const response = await this.client.get(`/actors/${actorId}/kyc`)
+    return response.data
+  }
+
+  async createActorKyc(actorId: number, data: { pieces: string[]; note?: string }) {
+    const response = await this.client.post(`/actors/${actorId}/kyc`, data)
+    return response.data
+  }
+
+  async getActorWallets(actorId: number) {
+    const response = await this.client.get(`/actors/${actorId}/wallets`)
+    return response.data
+  }
+
+  async createActorWallet(
+    actorId: number,
+    data: { provider: 'mobile_money' | 'bank' | 'card'; operator_name?: string; account_ref: string; is_primary?: boolean }
+  ) {
+    const response = await this.client.post(`/actors/${actorId}/wallets`, data)
+    return response.data
+  }
+
+  async getCommuneProfile(communeId: number) {
+    const response = await this.client.get(`/actors/communes/${communeId}/profile`)
+    return response.data
+  }
+
+  async patchCommuneProfile(
+    communeId: number,
+    data: { mobile_money_account_ref?: string; receiver_name?: string; receiver_phone?: string; active?: boolean }
+  ) {
+    const response = await this.client.patch(`/actors/communes/${communeId}/profile`, data)
+    return response.data
+  }
+
   async getLots(params?: { owner_actor_id?: number; status?: string; page?: number; page_size?: number }) {
     const response = await this.client.get('/lots', { params })
     return response.data
