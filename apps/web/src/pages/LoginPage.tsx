@@ -19,7 +19,7 @@ export default function LoginPage() {
 
     try {
       await login(identifier, password)
-      navigate('/dashboard')
+      navigate('/select-role')
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Identifiant ou mot de passe incorrect.'))
     } finally {
@@ -29,21 +29,20 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <form onSubmit={handleSubmit} className="login-form">
+      <form onSubmit={handleSubmit} className="login-form" data-testid="login-form">
         <div className="login-header">
           <h1>MADAVOLA</h1>
-          <p className="login-subtitle">Plateforme de gestion de transactions pour la filière agricole à Madagascar</p>
+          <p className="login-subtitle">
+            Plateforme de gestion de transactions pour les filières OR / PIERRE / BOIS à Madagascar
+          </p>
         </div>
-        {error && (
-          <div className="alert alert-error">
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-error">{error}</div>}
         <div className="form-group">
           <label htmlFor="identifier">Email ou Téléphone</label>
           <input
             type="text"
             id="identifier"
+            data-testid="login-identifier"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
@@ -56,16 +55,18 @@ export default function LoginPage() {
           <input
             type="password"
             id="password"
+            data-testid="login-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            placeholder="••••••••"
+            placeholder="********"
           />
         </div>
-        <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
+        <button type="submit" className="btn-primary" data-testid="login-submit" disabled={loading} style={{ width: '100%' }}>
           {loading ? 'Connexion...' : 'Se connecter'}
         </button>
       </form>
     </div>
   )
 }
+

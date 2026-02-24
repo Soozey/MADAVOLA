@@ -1,13 +1,7 @@
-/**
- * Configuration des menus et dashboards selon les rôles MADAVOLA.
- * Aligné sur le référentiel des autorités (stratégique, central, contrôle, territorial, communautaire, judiciaire).
- */
-
 export type MenuItem = {
   path: string
   label: string
   icon: string
-  /** Rôles autorisés à voir cet item (au moins un) */
   roles: string[]
 }
 
@@ -15,108 +9,173 @@ export const MENU_ITEMS: MenuItem[] = [
   {
     path: '/dashboard',
     label: 'Tableau de bord',
-    icon: '📊',
-    roles: ['admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'decentralisation', 'region', 'commune_agent', 'acteur', 'orpailleur', 'com', 'bcmm', 'forets', 'tresor', 'dgd'],
+    icon: 'DB',
+    roles: [
+      'admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'decentralisation',
+      'region', 'commune_agent', 'acteur', 'orpailleur', 'com', 'bcmm', 'forets', 'tresor', 'dgd',
+      'com_admin', 'com_agent', 'mines_region_agent', 'region_agent', 'district_agent',
+    ],
   },
   {
     path: '/dashboard/national',
     label: 'Vue nationale',
-    icon: '🇲🇬',
-    roles: ['admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'decentralisation', 'tresor', 'dgd', 'com', 'bcmm', 'forets'],
+    icon: 'NAT',
+    roles: ['admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'decentralisation', 'tresor', 'dgd', 'com', 'bcmm', 'forets', 'com_admin'],
   },
   {
     path: '/dashboard/regional',
     label: 'Vue régionale',
-    icon: '🗺️',
-    roles: ['admin', 'dirigeant', 'region', 'commune_agent', 'decentralisation'],
+    icon: 'REG',
+    roles: ['admin', 'dirigeant', 'region', 'commune_agent', 'decentralisation', 'mines_region_agent', 'region_agent', 'district_agent'],
   },
   {
     path: '/dashboard/commune',
     label: 'Vue communale',
-    icon: '🏘️',
-    roles: ['admin', 'dirigeant', 'commune_agent'],
+    icon: 'COM',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'commune'],
   },
   {
     path: '/ma-carte',
     label: 'Ma carte (QR)',
-    icon: '📇',
-    roles: ['acteur', 'orpailleur', 'admin', 'dirigeant', 'commune_agent'],
+    icon: 'QR',
+    roles: ['acteur', 'orpailleur', 'collecteur', 'bijoutier', 'admin', 'dirigeant', 'commune_agent'],
   },
   {
     path: '/actors',
     label: 'Acteurs',
-    icon: '👥',
-    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'mmrs', 'com', 'forets'],
+    icon: 'ACT',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'mmrs', 'com', 'com_admin', 'com_agent', 'forets'],
   },
   {
     path: '/lots',
     label: 'Lots',
-    icon: '📦',
-    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'mmrs', 'com', 'forets'],
+    icon: 'LOT',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'bijoutier', 'mmrs', 'com', 'com_admin', 'com_agent', 'forets', 'transporteur', 'pierre_exploitant', 'pierre_collecteur', 'pierre_lapidaire', 'pierre_exportateur', 'pierre_admin_central', 'bois_exploitant', 'bois_collecteur', 'bois_transformateur', 'bois_artisan', 'bois_exportateur', 'bois_admin_central'],
   },
   {
     path: '/transactions',
     label: 'Transactions',
-    icon: '💳',
-    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'mmrs', 'com', 'forets'],
+    icon: 'TRX',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'bijoutier', 'mmrs', 'com', 'com_admin', 'com_agent', 'forets', 'comptoir_operator', 'comptoir_compliance', 'comptoir_director', 'pierre_exploitant', 'pierre_collecteur', 'pierre_lapidaire', 'pierre_exportateur', 'pierre_admin_central', 'bois_exploitant', 'bois_collecteur', 'bois_transformateur', 'bois_artisan', 'bois_exportateur', 'bois_admin_central'],
+  },
+  {
+    path: '/trades',
+    label: 'Transactions avancées',
+    icon: 'TRD',
+    roles: ['admin', 'dirigeant', 'acteur', 'collecteur', 'orpailleur', 'pierre_exploitant', 'pierre_collecteur', 'pierre_lapidaire', 'pierre_exportateur', 'bois_exploitant', 'bois_collecteur', 'bois_transformateur', 'bois_artisan', 'bois_exportateur'],
   },
   {
     path: '/exports',
-    label: 'Dossiers export',
-    icon: '📤',
-    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'mmrs', 'com', 'dgd'],
+    label: 'Exportations',
+    icon: 'EXP',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'mmrs', 'com', 'com_admin', 'com_agent', 'dgd', 'douanes_agent', 'gue_or_agent', 'pierre_exportateur', 'pierre_controleur_mines', 'pierre_douanes', 'pierre_admin_central', 'bois_exportateur', 'bois_douanes', 'bois_admin_central', 'forets'],
+  },
+  {
+    path: '/transports',
+    label: 'Transports',
+    icon: 'TRP',
+    roles: ['admin', 'dirigeant', 'transporteur', 'transporteur_agree', 'bois_transporteur', 'bois_controleur', 'bois_douanes', 'forets', 'bois_admin_central'],
+  },
+  {
+    path: '/transformations',
+    label: 'Transformations',
+    icon: 'TRF',
+    roles: ['admin', 'dirigeant', 'bois_transformateur', 'bois_artisan', 'bois_admin_central', 'forets'],
   },
   {
     path: '/invoices',
     label: 'Factures',
-    icon: '🧾',
-    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'mmrs', 'com', 'forets'],
+    icon: 'INV',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'mmrs', 'com', 'collecteur', 'forets'],
   },
   {
     path: '/ledger',
     label: 'Grand livre',
-    icon: '📒',
-    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'mmrs', 'com', 'forets'],
+    icon: 'LED',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'mmrs', 'com', 'com_admin', 'forets'],
   },
   {
     path: '/reports',
     label: 'Rapports',
-    icon: '📈',
-    roles: ['admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'region', 'commune_agent', 'decentralisation', 'tresor', 'dgd', 'com', 'bcmm', 'forets'],
+    icon: 'RPT',
+    roles: [
+      'admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'region', 'commune_agent',
+      'decentralisation', 'tresor', 'dgd', 'com', 'com_admin', 'com_agent', 'bcmm', 'forets',
+      'mines_region_agent', 'region_agent', 'district_agent',
+    ],
   },
   {
     path: '/audit',
-    label: 'Audit / Traces',
-    icon: '📋',
-    roles: ['admin', 'dirigeant', 'bianco'],
+    label: 'Audit et traces',
+    icon: 'AUD',
+    roles: ['admin', 'dirigeant', 'bianco', 'com_admin'],
   },
   {
     path: '/inspections',
     label: 'Contrôles / Inspections',
-    icon: '🔍',
-    roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'police', 'gendarmerie', 'forets'],
+    icon: 'CTL',
+    roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'forets', 'com_agent', 'pierre_controleur_mines', 'pierre_douanes'],
   },
   {
     path: '/violations',
     label: 'Violations',
-    icon: '⚠️',
-    roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'police', 'gendarmerie', 'forets'],
+    icon: 'VIO',
+    roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'forets', 'com_agent', 'pierre_controleur_mines', 'pierre_douanes'],
   },
   {
     path: '/penalties',
     label: 'Pénalités',
-    icon: '💰',
-    roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'police', 'gendarmerie', 'forets'],
+    icon: 'PEN',
+    roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'forets', 'com_admin'],
   },
   {
     path: '/verify',
     label: 'Vérification acteur (QR)',
-    icon: '📱',
-    roles: ['admin', 'dirigeant', 'dgd', 'police', 'gendarmerie', 'commune_agent'],
+    icon: 'VRF',
+    roles: ['admin', 'dirigeant', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'commune_agent', 'transporteur'],
+  },
+  {
+    path: '/notifications',
+    label: 'Notifications',
+    icon: 'NTF',
+    roles: ['admin', 'dirigeant', 'acteur', 'orpailleur', 'collecteur', 'pierre_exploitant', 'pierre_collecteur', 'pierre_exportateur', 'bois_exploitant', 'bois_collecteur', 'bois_exportateur', 'bois_admin_central'],
+  },
+  {
+    path: '/map',
+    label: 'Cartographie',
+    icon: 'MAP',
+    roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'transporteur', 'police', 'gendarmerie', 'forets', 'com_agent', 'com_admin', 'pierre_admin_central', 'bois_admin_central'],
+  },
+  {
+    path: '/admin-config',
+    label: 'Configuration admin',
+    icon: 'CFG',
+    roles: ['admin'],
+  },
+  {
+    path: '/documents',
+    label: 'Documents',
+    icon: 'DOC',
+    roles: ['admin', 'dirigeant', 'acteur', 'orpailleur', 'collecteur', 'commune_agent', 'com', 'com_admin', 'com_agent', 'pierre_admin_central', 'bois_admin_central', 'bois_exportateur', 'pierre_exportateur'],
+  },
+  {
+    path: '/ops-coverage',
+    label: 'Couverture API/UI',
+    icon: 'OPS',
+    roles: ['admin', 'dirigeant', 'com_admin'],
+  },
+  {
+    path: '/or-compliance',
+    label: 'Conformité OR',
+    icon: 'OR',
+    roles: [
+      'admin', 'dirigeant', 'com', 'com_admin', 'com_agent', 'commune', 'commune_agent',
+      'collecteur', 'orpailleur', 'bijoutier', 'douanes_agent', 'gue_or_agent',
+      'mines_region_agent', 'lab_bgglm', 'raffinerie_agent',
+    ],
   },
 ]
 
-/** Libellés des rôles */
 export const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrateur',
   dirigeant: 'Dirigeant',
@@ -127,31 +186,60 @@ export const ROLE_LABELS: Record<string, string> = {
   bfm: 'BFM (Banque centrale)',
   decentralisation: 'Décentralisation',
   region: 'Région',
+  commune: 'Commune',
   commune_agent: 'Commune / Maire',
   acteur: 'Acteur',
   orpailleur: 'Orpailleur',
+  collecteur: 'Collecteur',
   bianco: 'BIANCO',
   police: 'Police',
   gendarmerie: 'Gendarmerie',
   dgd: 'Douanes (DGD)',
+  douanes_agent: 'Douanes Agent',
+  gue_or_agent: 'GUE OR Agent',
   tresor: 'Trésor',
   com: 'COM (Or)',
-  bcmm: 'BCMM (Cadastre minier)',
+  com_admin: 'COM Admin',
+  com_agent: 'COM Agent',
+  bcmm: 'BCMM',
   forets: 'Forêts / Environnement',
+  mines_region_agent: 'Mines Région Agent',
+  lab_bgglm: 'BGGLM',
+  raffinerie_agent: 'Raffinerie Agent',
+  transporteur: 'Transporteur',
+  region_agent: 'Région Agent',
+  district_agent: 'District Agent',
   fokontany: 'Fokontany',
   justice: 'Justice',
+  bijoutier: 'Bijoutier',
+  pierre_exploitant: 'Pierre Exploitant',
+  pierre_collecteur: 'Pierre Collecteur',
+  pierre_lapidaire: 'Pierre Lapidaire',
+  pierre_exportateur: 'Pierre Exportateur',
+  pierre_controleur_mines: 'Pierre Contrôleur Mines',
+  pierre_douanes: 'Pierre Douanes',
+  pierre_commune_agent: 'Pierre Commune Agent',
+  pierre_admin_central: 'Pierre Admin Central',
+  bois_exploitant: 'Bois Exploitant',
+  bois_collecteur: 'Bois Collecteur',
+  bois_transporteur: 'Bois Transporteur',
+  bois_transformateur: 'Bois Transformateur',
+  bois_artisan: 'Bois Artisan',
+  bois_exportateur: 'Bois Exportateur',
+  bois_forest_admin: 'Bois Administration Forestière',
+  bois_douanes: 'Bois Douanes',
+  bois_commune_agent: 'Bois Commune Agent',
+  bois_controleur: 'Bois Contrôleur',
+  bois_admin_central: 'Bois Admin Central',
 }
 
-/** Rôles qui peuvent voir le dashboard national (indicateurs agrégés) */
 export const ROLES_DASHBOARD_NATIONAL = [
-  'admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'decentralisation', 'tresor', 'dgd', 'com', 'bcmm', 'forets',
+  'admin', 'dirigeant', 'pr', 'pm', 'mmrs', 'mef', 'bfm', 'decentralisation',
+  'tresor', 'dgd', 'com', 'com_admin', 'bcmm', 'forets',
 ]
 
-/** Rôles qui peuvent voir le dashboard régional */
-export const ROLES_DASHBOARD_REGIONAL = ['admin', 'dirigeant', 'region', 'commune_agent', 'decentralisation']
-
-/** Rôles qui peuvent voir le dashboard communal */
-export const ROLES_DASHBOARD_COMMUNE = ['admin', 'dirigeant', 'commune_agent']
+export const ROLES_DASHBOARD_REGIONAL = ['admin', 'dirigeant', 'region', 'commune_agent', 'decentralisation', 'mines_region_agent', 'region_agent', 'district_agent']
+export const ROLES_DASHBOARD_COMMUNE = ['admin', 'dirigeant', 'commune_agent', 'commune']
 
 export function canAccessMenu(userRoles: string[], item: MenuItem): boolean {
   if (!userRoles?.length) return false

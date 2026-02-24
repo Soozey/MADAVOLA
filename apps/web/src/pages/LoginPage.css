@@ -3,7 +3,7 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0b2a5b 0%, #1f4f8c 100%);
   padding: var(--spacing-lg);
 }
 
@@ -27,12 +27,12 @@
 }
 
 .login-header p {
-  color: var(--text-secondary);
+  color: #324868;
   font-size: 0.875rem;
 }
 
 .login-subtitle {
-  color: var(--text-secondary);
+  color: #324868;
   font-size: 0.9rem;
   max-width: 320px;
   margin: 0 auto;
@@ -45,4 +45,23 @@
 
 .login-form input {
   margin-top: var(--spacing-xs);
+  border-color: #8aa4c7;
+  color: #0d1b32;
+}
+
+.login-form input::placeholder {
+  color: #4a6182;
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .login-page {
+    padding: var(--spacing-md);
+    align-items: flex-start;
+  }
+
+  .login-form {
+    margin-top: 8vh;
+    padding: var(--spacing-lg);
+  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { MobileRoleSelector } from './features/rbac/MobileRoleSelector'
 import type { FiliereCode, RbacRole } from './features/rbac/types'
@@ -830,14 +830,14 @@ export default function App() {
     <div className="container">
       <div className="card">
         <h1 className="title">MADAVOLA Mobile OR / PIERRE / BOIS</h1>
-        <small>Branchement mobile des workflows utilisateur (session, acteurs, lots, transactions, exportations, transports, transformations, scan, notifications).</small>
+        <small>Parcours mobile métier (session, acteurs, lots, transactions, exportations, transports, transformations, scan, notifications).</small>
       </div>
 
       {entryStep === 'login' && (
         <div className="card">
           <h2 className="title">Connexion</h2>
           <div className="row">
-            <input placeholder="email ou telephone" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
+            <input placeholder="email ou téléphone" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
             <input placeholder="mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             <button onClick={login}>Se connecter</button>
           </div>
@@ -846,7 +846,7 @@ export default function App() {
 
       {entryStep === 'role' && (
         <div className="card">
-          <h2 className="title">Etape 1 - Choisir votre role</h2>
+          <h2 className="title">Étape 1 - Choisir votre rôle</h2>
           <small>Source unique: API RBAC.</small>
           <div className="row" style={{ marginTop: 8 }}>
             <MobileRoleSelector
@@ -863,27 +863,25 @@ export default function App() {
               onActorTypeChange={setRoleActorType}
               showFiliereSelect={false}
             />
-            {entryRolesLoading && <small>Chargement des roles...</small>}
+            {entryRolesLoading && <small>Chargement des rôles...</small>}
             {entryRolesError && <small style={{ color: '#a12a22' }}>{entryRolesError}</small>}
             {!entryRolesLoading && !entryRolesError && entryRoles.length === 0 && (
-              <small>Aucun role disponible pour votre compte.</small>
+              <small>Aucun rôle disponible pour votre compte.</small>
             )}
             <button onClick={continueFromRole} disabled={!selectedRole}>
               Continuer
             </button>
-            <button className="secondary" onClick={logout}>
-              Se deconnecter
-            </button>
+            <button className="secondary" onClick={logout}>Se déconnecter</button>
           </div>
         </div>
       )}
 
       {entryStep === 'filiere' && (
         <div className="card">
-          <h2 className="title">Etape 2 - Choisir votre filiere</h2>
+          <h2 className="title">Étape 2 - Choisir votre filière</h2>
           <div className="row">
             <select value={selectedFiliere} onChange={(e) => setSelectedFiliere(e.target.value as FiliereCode)}>
-              <option value="">Selectionner</option>
+              <option value="">Sélectionner</option>
               <option value="OR">OR</option>
               <option value="PIERRE">PIERRE</option>
               <option value="BOIS">BOIS</option>
@@ -891,9 +889,7 @@ export default function App() {
             <button onClick={continueFromFiliere} disabled={!selectedRole || !selectedFiliere || permissionsLoading}>
               {permissionsLoading ? 'Chargement...' : 'Continuer'}
             </button>
-            <button className="secondary" onClick={() => setEntryStep('role')}>
-              Retour au role
-            </button>
+            <button className="secondary" onClick={() => setEntryStep('role')}>Retour au rôle</button>
           </div>
         </div>
       )}
@@ -902,25 +898,25 @@ export default function App() {
         <div className="card">
           <div className="row">
             <span className="badge">
-              Session #{me?.id || '-'} | Role: {selectedRole || '-'} | Filiere: {selectedFiliere || '-'}
+              Session #{me?.id || '-'} | Rôle: {selectedRole || '-'} | Filière: {selectedFiliere || '-'}
             </span>
-            {contextLoading && <small>Chargement des donnees...</small>}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <button className="secondary" onClick={() => setEntryStep('role')}>Changer role</button>
-              <button className="secondary" onClick={() => setEntryStep('filiere')}>Changer filiere</button>
+            {contextLoading && <small>Chargement des données...</small>}
+            <div className="session-actions-grid">
+              <button className="secondary" onClick={() => setEntryStep('role')}>Changer rôle</button>
+              <button className="secondary" onClick={() => setEntryStep('filiere')}>Changer filière</button>
             </div>
-            <button className="secondary" onClick={logout}>Se deconnecter</button>
+            <button className="secondary" onClick={logout}>Se déconnecter</button>
           </div>
         </div>
       )}
 
       {entryStep === 'dashboard' && (
         <div className="card">
-          <div className="tabs" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+          <div className="tabs-grid">
             {(visibleTabs.length ? visibleTabs : TABS).map((t) => (
               <button
                 key={t.key}
-                className={`${activeTab === t.key ? '' : 'secondary'} ${t.key === 'verify' ? 'scan-cta' : ''}`}
+                className={`module-btn ${activeTab === t.key ? '' : 'secondary'} ${t.key === 'verify' ? 'scan-cta' : ''}`}
                 onClick={() => setActiveTab(t.key)}
               >
                 {t.label}
@@ -928,14 +924,14 @@ export default function App() {
             ))}
           </div>
           {visibleTabs.length === 0 && (
-            <small>Aucun module autorise pour ce role.</small>
+            <small>Aucun module autorisé pour ce rôle.</small>
           )}
         </div>
       )}
 
       {entryStep === 'dashboard' && activeTab === 'actors' && (
         <div className="card">
-          <h2 className="title">Creer acteur</h2>
+          <h2 className="title">Créer acteur</h2>
           <div className="row">
             <MobileRoleSelector
               filiere={actorForm.filiere as FiliereCode}
@@ -995,11 +991,11 @@ export default function App() {
             </select>
             {territoriesLoading && <small>Chargement des territoires...</small>}
             <input value={actorForm.nom} onChange={(e) => setActorForm((p: any) => ({ ...p, nom: e.target.value }))} placeholder="Nom" />
-            <input value={actorForm.prenoms} onChange={(e) => setActorForm((p: any) => ({ ...p, prenoms: e.target.value }))} placeholder="Prenoms" />
+            <input value={actorForm.prenoms} onChange={(e) => setActorForm((p: any) => ({ ...p, prenoms: e.target.value }))} placeholder="Prénoms" />
             <input value={actorForm.email} onChange={(e) => setActorForm((p: any) => ({ ...p, email: e.target.value }))} placeholder="Email" />
-            <input value={actorForm.telephone} onChange={(e) => setActorForm((p: any) => ({ ...p, telephone: e.target.value }))} placeholder="Telephone" />
+            <input value={actorForm.telephone} onChange={(e) => setActorForm((p: any) => ({ ...p, telephone: e.target.value }))} placeholder="Téléphone" />
             <input value={actorForm.password} onChange={(e) => setActorForm((p: any) => ({ ...p, password: e.target.value }))} placeholder="Mot de passe" />
-            <button onClick={createActor}>Creer acteur</button>
+            <button onClick={createActor}>Créer acteur</button>
           </div>
 
           <h2 className="title" style={{ marginTop: 16 }}>Demande carte OR (acteur)</h2>
@@ -1019,7 +1015,7 @@ export default function App() {
             {myFees.filter((f: any) => f.status === 'pending').map((f: any) => (
               <li key={f.id}>
                 #{f.id} {f.fee_type} {f.amount} {f.currency}
-                <button className="secondary" style={{ marginLeft: 8 }} onClick={() => markFeePaid(f.id)}>Marquer paye</button>
+                <button className="secondary" style={{ marginLeft: 8 }} onClick={() => markFeePaid(f.id)}>Marquer payé</button>
               </li>
             ))}
           </ul>
@@ -1051,7 +1047,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'lots' && (
         <div className="card">
-          <h2 className="title">Declarer lot</h2>
+          <h2 className="title">Déclarer lot</h2>
           <div className="row">
             <select value={lotForm.filiere} onChange={(e) => setLotForm((p: any) => ({ ...p, filiere: e.target.value }))}>
               <option value="OR">OR</option>
@@ -1068,7 +1064,7 @@ export default function App() {
                   <option value="">Produit catalog</option>
                   {(catalogProducts || []).map((p: any) => <option key={p.id} value={p.id}>{p.code} - {p.nom}</option>)}
                 </select>
-                <input placeholder="Attribut cle" value={lotForm.attr_key} onChange={(e) => setLotForm((p: any) => ({ ...p, attr_key: e.target.value }))} />
+                <input placeholder="Attribut clé" value={lotForm.attr_key} onChange={(e) => setLotForm((p: any) => ({ ...p, attr_key: e.target.value }))} />
                 <input placeholder="Attribut valeur" value={lotForm.attr_value} onChange={(e) => setLotForm((p: any) => ({ ...p, attr_value: e.target.value }))} />
               </>
             )}
@@ -1090,9 +1086,9 @@ export default function App() {
               </>
             )}
             <input placeholder="type produit" value={lotForm.product_type} onChange={(e) => setLotForm((p: any) => ({ ...p, product_type: e.target.value }))} />
-            <input placeholder="quantite" value={lotForm.quantity} onChange={(e) => setLotForm((p: any) => ({ ...p, quantity: e.target.value }))} />
-            <input placeholder="unite" value={lotForm.unit} onChange={(e) => setLotForm((p: any) => ({ ...p, unit: e.target.value }))} />
-            <button onClick={createLot}>Creer lot</button>
+            <input placeholder="quantité" value={lotForm.quantity} onChange={(e) => setLotForm((p: any) => ({ ...p, quantity: e.target.value }))} />
+            <input placeholder="unité" value={lotForm.unit} onChange={(e) => setLotForm((p: any) => ({ ...p, unit: e.target.value }))} />
+            <button onClick={createLot}>Créer lot</button>
             {lots.length === 0 && <small>Aucun lot disponible.</small>}
           </div>
         </div>
@@ -1114,9 +1110,9 @@ export default function App() {
               <option value="">Lot</option>
               {lots.map((l: any) => <option key={l.id} value={l.id}>#{l.id} {l.filiere} {l.quantity} {l.unit}</option>)}
             </select>
-            <input placeholder="Quantite" value={tradeForm.quantity} onChange={(e) => setTradeForm((p: any) => ({ ...p, quantity: e.target.value }))} />
+            <input placeholder="Quantité" value={tradeForm.quantity} onChange={(e) => setTradeForm((p: any) => ({ ...p, quantity: e.target.value }))} />
             <input placeholder="Prix unitaire" value={tradeForm.unit_price} onChange={(e) => setTradeForm((p: any) => ({ ...p, unit_price: e.target.value }))} />
-            <button onClick={createTrade}>Creer transaction</button>
+            <button onClick={createTrade}>Créer transaction</button>
             <input placeholder="ID transaction" value={tradeForm.trade_id} onChange={(e) => setTradeForm((p: any) => ({ ...p, trade_id: e.target.value }))} />
             <button onClick={payTrade}>Payer la transaction</button>
             <button onClick={confirmTrade}>Confirmer la transaction</button>
@@ -1130,13 +1126,13 @@ export default function App() {
           <h2 className="title">Parcours exportation</h2>
           <div className="row">
             <input placeholder="Destination" value={exportForm.destination} onChange={(e) => setExportForm((p: any) => ({ ...p, destination: e.target.value }))} />
-            <button onClick={createExport}>Creer le dossier exportation</button>
+            <button onClick={createExport}>Créer le dossier d'exportation</button>
             <input placeholder="ID exportation" value={exportForm.export_id} onChange={(e) => setExportForm((p: any) => ({ ...p, export_id: e.target.value }))} />
             <select value={exportForm.lot_id} onChange={(e) => setExportForm((p: any) => ({ ...p, lot_id: e.target.value }))}>
               <option value="">Lot</option>
               {lots.map((l: any) => <option key={l.id} value={l.id}>#{l.id} {l.filiere}</option>)}
             </select>
-            <input placeholder="Quantite export" value={exportForm.qty} onChange={(e) => setExportForm((p: any) => ({ ...p, qty: e.target.value }))} />
+            <input placeholder="Quantité export" value={exportForm.qty} onChange={(e) => setExportForm((p: any) => ({ ...p, qty: e.target.value }))} />
             <button onClick={linkExportLot}>Lier le lot</button>
             <button onClick={submitExport}>Soumettre</button>
             <select value={exportForm.step_code} onChange={(e) => setExportForm((p: any) => ({ ...p, step_code: e.target.value }))}>
@@ -1147,8 +1143,8 @@ export default function App() {
               <option value="approved">approved</option>
               <option value="rejected">rejected</option>
             </select>
-            <input placeholder="Numero de scelle" value={exportForm.seal_number} onChange={(e) => setExportForm((p: any) => ({ ...p, seal_number: e.target.value }))} />
-            <button onClick={validateExport}>Valider l'etape</button>
+            <input placeholder="Numéro de scellé" value={exportForm.seal_number} onChange={(e) => setExportForm((p: any) => ({ ...p, seal_number: e.target.value }))} />
+            <button onClick={validateExport}>Valider l'étape</button>
           </div>
         </div>
       )}
@@ -1162,13 +1158,13 @@ export default function App() {
               <option value="">Lot</option>
               {lots.map((l: any) => <option key={l.id} value={l.id}>#{l.id} {l.filiere}</option>)}
             </select>
-            <input placeholder="Quantite" value={transportForm.quantity} onChange={(e) => setTransportForm((p: any) => ({ ...p, quantity: e.target.value }))} />
+            <input placeholder="Quantité" value={transportForm.quantity} onChange={(e) => setTransportForm((p: any) => ({ ...p, quantity: e.target.value }))} />
             <input placeholder="Origine" value={transportForm.origin} onChange={(e) => setTransportForm((p: any) => ({ ...p, origin: e.target.value }))} />
             <input placeholder="Destination" value={transportForm.destination} onChange={(e) => setTransportForm((p: any) => ({ ...p, destination: e.target.value }))} />
-            <button onClick={createTransport}>Creer le transport</button>
+            <button onClick={createTransport}>Créer le transport</button>
             <input placeholder="ID transport" value={transportForm.transport_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, transport_id: e.target.value }))} />
-            <input placeholder="ID lot a verifier" value={transportForm.verify_lot_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, verify_lot_id: e.target.value }))} />
-            <button className="verify-cta" onClick={verifyTransport}>Verifier le scan</button>
+            <input placeholder="ID lot à vérifier" value={transportForm.verify_lot_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, verify_lot_id: e.target.value }))} />
+            <button className="verify-cta" onClick={verifyTransport}>Vérifier le scan</button>
           </div>
         </div>
       )}
@@ -1187,7 +1183,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'verify' && (
         <div className="card">
-          <h2 className="title">Scan et verification</h2>
+          <h2 className="title">Scan et vérification</h2>
           <div className="row">
             <select value={verifyKind} onChange={(e) => setVerifyKind(e.target.value as VerifyKind)}>
               <option value="actor">Acteur</option>
@@ -1195,14 +1191,14 @@ export default function App() {
               <option value="invoice">Facture</option>
             </select>
             <div className="camera-inline">
-              <input placeholder="ID / Reference" value={verifyValue} onChange={(e) => setVerifyValue(e.target.value)} />
+              <input placeholder="ID / Référence" value={verifyValue} onChange={(e) => setVerifyValue(e.target.value)} />
               <button
                 type="button"
                 className="secondary camera-btn"
-                title="Ouvrir la camera"
+                title="Ouvrir la caméra"
                 onClick={() => cameraInputRef.current?.click()}
               >
-                📷
+                Caméra
               </button>
             </div>
             <input
@@ -1214,10 +1210,10 @@ export default function App() {
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
-                showSuccess(`Image capturee (${file.name}). Appuyez sur "Verifier" pour lancer le controle.`)
+                showSuccess(`Image capturée (${file.name}). Appuyez sur "Vérifier" pour lancer le contrôle.`)
               }}
             />
-            <button className="verify-cta" onClick={verify}>Verifier</button>
+            <button className="verify-cta" onClick={verify}>Vérifier</button>
           </div>
         </div>
       )}
@@ -1227,7 +1223,7 @@ export default function App() {
           <h2 className="title">Notifications</h2>
           <div className="row">
             <button onClick={runNotifications}>Lancer les rappels</button>
-            <button className="secondary" onClick={refreshContext}>Rafraichir</button>
+            <button className="secondary" onClick={refreshContext}>Rafraîchir</button>
           </div>
           {(notifications || []).length > 0 ? <pre>{JSON.stringify(notifications, null, 2)}</pre> : <small>Aucune notification.</small>}
           <h3>Alerte d'urgence Police/Gendarmerie</h3>
@@ -1270,4 +1266,6 @@ export default function App() {
     </div>
   )
 }
+
+
 
