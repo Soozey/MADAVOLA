@@ -38,6 +38,20 @@ small { color: #314a68; }
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
+.task-primary {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 8px;
+}
+.task-steps {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.module-toggle {
+  margin-bottom: 10px;
+}
 .session-actions-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

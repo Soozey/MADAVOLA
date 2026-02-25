@@ -19,20 +19,32 @@ const STORAGE_ROLE_KEY = 'mobile_selected_role'
 const STORAGE_FILIERE_KEY = 'mobile_selected_filiere'
 
 const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'actors', label: 'Acteurs' },
-  { key: 'lots', label: 'Lots' },
-  { key: 'trades', label: 'Transactions' },
-  { key: 'exports', label: 'Exportations' },
+  { key: 'actors', label: 'Comptes' },
+  { key: 'lots', label: 'Déclarations lots' },
+  { key: 'trades', label: 'Ventes et transferts' },
+  { key: 'exports', label: 'Dossiers export' },
   { key: 'transports', label: 'Transport' },
   { key: 'transformations', label: 'Transformation' },
-  { key: 'verify', label: 'Scan' },
-  { key: 'notifications', label: 'Notifications' },
+  { key: 'verify', label: 'Scanner / Vérifier' },
+  { key: 'notifications', label: 'Messages' },
 ]
+
+const TAB_HINTS: Record<TabKey, string> = {
+  actors: 'Créer et valider les comptes, gérer KYC et wallets.',
+  lots: 'Déclarer la production et générer le QR des lots.',
+  trades: 'Payer puis transférer la propriété en toute traçabilité.',
+  exports: 'Préparer, soumettre et valider les dossiers export.',
+  transports: 'Créer et contrôler les mouvements inter-communes.',
+  transformations: 'Déclarer split/consolidation et sorties matière.',
+  verify: 'Scanner un QR et vérifier immédiatement le statut.',
+  notifications: 'Suivre alertes, rappels et urgences terrain.',
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('actors')
   const [token, setToken] = useState(localStorage.getItem(STORAGE_TOKEN_KEY) || '')
   const [entryStep, setEntryStep] = useState<EntryStep>('login')
+  const [showAllModules, setShowAllModules] = useState(false)
   const [selectedRole, setSelectedRole] = useState<string>(localStorage.getItem(STORAGE_ROLE_KEY) || '')
   const [selectedFiliere, setSelectedFiliere] = useState<FiliereCode | ''>(
     (localStorage.getItem(STORAGE_FILIERE_KEY) as FiliereCode | null) || ''
@@ -278,6 +290,40 @@ export default function App() {
   const canTargetAnyCommuneProfile = roleFromSession
     ? ['admin', 'dirigeant', 'com', 'com_admin', 'com_agent'].includes(roleFromSession)
     : (me?.roles || []).some((r: any) => ['admin', 'dirigeant', 'com', 'com_admin', 'com_agent'].includes(r.role))
+  const allTabs = visibleTabs.length ? visibleTabs : TABS
+  const roleTaskOrder: Record<string, TabKey[]> = {
+    orpailleur: ['lots', 'trades', 'notifications'],
+    collecteur: ['trades', 'lots', 'notifications'],
+    commune: ['actors', 'notifications', 'lots'],
+    commune_agent: ['actors', 'notifications', 'lots'],
+    com: ['actors', 'exports', 'notifications'],
+    com_admin: ['actors', 'exports', 'notifications'],
+    com_agent: ['actors', 'exports', 'notifications'],
+    comptoir_operator: ['exports', 'lots', 'notifications'],
+    comptoir_compliance: ['exports', 'verify', 'notifications'],
+    comptoir_director: ['exports', 'trades', 'notifications'],
+    police: ['verify', 'notifications', 'transports'],
+    gendarmerie: ['verify', 'notifications', 'transports'],
+    controleur: ['verify', 'notifications', 'transports'],
+    bois_controleur: ['verify', 'notifications', 'transports'],
+    pierre_controleur_mines: ['verify', 'notifications', 'exports'],
+    admin: ['actors', 'lots', 'notifications'],
+    dirigeant: ['exports', 'notifications', 'trades'],
+  }
+  const preferredTaskKeys = roleTaskOrder[roleFromSession] || ['lots', 'trades', 'notifications']
+  const mappedTaskTabs = preferredTaskKeys
+    .map((key) => allTabs.find((tab) => tab.key === key))
+    .filter(Boolean) as Array<{ key: TabKey; label: string }>
+  const taskTabs = mappedTaskTabs.length > 0 ? mappedTaskTabs : allTabs.slice(0, 3)
+  const displayedTabs = showAllModules ? allTabs : taskTabs
+
+  useEffect(() => {
+    if (entryStep !== 'dashboard') return
+    if (displayedTabs.length === 0) return
+    if (!displayedTabs.some((tab) => tab.key === activeTab)) {
+      setActiveTab(displayedTabs[0].key)
+    }
+  }, [entryStep, displayedTabs, activeTab])
 
   const refreshContext = async () => {
     if (!token) return
@@ -1063,8 +1109,39 @@ export default function App() {
 
       {entryStep === 'dashboard' && (
         <div className="card">
+          <h2 className="title">Tâches du jour</h2>
+          <small>Commencez par l’action principale, puis utilisez les étapes suivantes.</small>
+          {taskTabs[0] && (
+            <div className="task-primary">
+              <button
+                className={`module-btn ${activeTab === taskTabs[0].key ? '' : 'secondary'} ${taskTabs[0].key === 'verify' ? 'scan-cta' : ''}`}
+                onClick={() => setActiveTab(taskTabs[0].key)}
+              >
+                {taskTabs[0].label}
+              </button>
+              <small>{TAB_HINTS[taskTabs[0].key]}</small>
+            </div>
+          )}
+          {taskTabs.length > 1 && (
+            <div className="task-steps">
+              {taskTabs.slice(1).map((tab, idx) => (
+                <button
+                  key={tab.key}
+                  className={`module-btn ${activeTab === tab.key ? '' : 'secondary'} ${tab.key === 'verify' ? 'scan-cta' : ''}`}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {`Étape ${idx + 2} - ${tab.label}`}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button className="secondary module-toggle" onClick={() => setShowAllModules((v) => !v)}>
+            {showAllModules ? 'Masquer modules avancés' : 'Afficher tous les modules'}
+          </button>
+
           <div className="tabs-grid">
-            {(visibleTabs.length ? visibleTabs : TABS).map((t) => (
+            {displayedTabs.map((t) => (
               <button
                 key={t.key}
                 className={`module-btn ${activeTab === t.key ? '' : 'secondary'} ${t.key === 'verify' ? 'scan-cta' : ''}`}
@@ -1074,7 +1151,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          {visibleTabs.length === 0 && (
+          {allTabs.length === 0 && (
             <small>Aucun module autorisé pour ce rôle.</small>
           )}
         </div>
@@ -1082,7 +1159,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'actors' && (
         <div className="card">
-          <h2 className="title">Créer acteur</h2>
+          <h2 className="title">Comptes et validations</h2>
           <div className="row">
             <MobileRoleSelector
               filiere={actorForm.filiere as FiliereCode}
@@ -1284,7 +1361,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'lots' && (
         <div className="card">
-          <h2 className="title">Déclarer lot</h2>
+          <h2 className="title">Déclarations de lots</h2>
           <div className="row">
             <select value={lotForm.filiere} onChange={(e) => setLotForm((p: any) => ({ ...p, filiere: e.target.value }))}>
               <option value="OR">OR</option>
@@ -1333,7 +1410,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'trades' && (
         <div className="card">
-          <h2 className="title">Parcours transaction</h2>
+          <h2 className="title">Ventes et transferts</h2>
           <div className="row">
             <select value={tradeForm.seller_actor_id} onChange={(e) => setTradeForm((p: any) => ({ ...p, seller_actor_id: e.target.value }))}>
               <option value="">Vendeur</option>
@@ -1360,7 +1437,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'exports' && (
         <div className="card">
-          <h2 className="title">Parcours exportation</h2>
+          <h2 className="title">Dossiers export</h2>
           <div className="row">
             <input placeholder="Destination" value={exportForm.destination} onChange={(e) => setExportForm((p: any) => ({ ...p, destination: e.target.value }))} />
             <button onClick={createExport}>Créer le dossier d'exportation</button>
@@ -1388,7 +1465,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'transports' && (
         <div className="card">
-          <h2 className="title">Transport BOIS</h2>
+          <h2 className="title">Mouvements / transport</h2>
           <div className="row">
             <input placeholder="ID acteur transporteur" value={transportForm.transporter_actor_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, transporter_actor_id: e.target.value }))} />
             <select value={transportForm.lot_id} onChange={(e) => setTransportForm((p: any) => ({ ...p, lot_id: e.target.value }))}>
@@ -1419,7 +1496,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'transformations' && (
         <div className="card">
-          <h2 className="title">Transformation</h2>
+          <h2 className="title">Transformation matière</h2>
           <div className="row">
             <input placeholder="Operation" value={transformationForm.operation_type} onChange={(e) => setTransformationForm((p: any) => ({ ...p, operation_type: e.target.value }))} />
             <input placeholder="IDs lots entree (12,13)" value={transformationForm.input_lot_ids} onChange={(e) => setTransformationForm((p: any) => ({ ...p, input_lot_ids: e.target.value }))} />
@@ -1431,7 +1508,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'verify' && (
         <div className="card">
-          <h2 className="title">Scan et vérification</h2>
+          <h2 className="title">Scanner / vérifier</h2>
           <div className="row">
             <select value={verifyKind} onChange={(e) => setVerifyKind(e.target.value as VerifyKind)}>
               <option value="actor">Acteur</option>
@@ -1468,7 +1545,7 @@ export default function App() {
 
       {entryStep === 'dashboard' && activeTab === 'notifications' && (
         <div className="card">
-          <h2 className="title">Notifications</h2>
+          <h2 className="title">Messages et alertes</h2>
           <div className="row">
             <button onClick={runNotifications}>Lancer les rappels</button>
             <button className="secondary" onClick={refreshContext}>Rafraîchir</button>
