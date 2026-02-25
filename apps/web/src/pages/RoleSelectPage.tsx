@@ -242,11 +242,15 @@ export default function RoleSelectPage() {
                           className={`role-row ${draftRole === role.code ? 'selected' : ''}`}
                           role="button"
                           tabIndex={0}
-                          onClick={() => setDraftRole(role.code)}
+                          onClick={() => {
+                            setDraftRole(role.code)
+                            handleValidate(role.code)
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault()
                               setDraftRole(role.code)
+                              handleValidate(role.code)
                             }
                           }}
                         >
@@ -273,7 +277,6 @@ export default function RoleSelectPage() {
                               className="btn-secondary"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setDraftRole(role.code)
                                 handleValidate(role.code)
                               }}
                             >

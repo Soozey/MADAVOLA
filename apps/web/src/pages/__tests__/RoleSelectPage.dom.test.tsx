@@ -72,7 +72,6 @@ describe('RoleSelectPage UX', () => {
     expect(await screen.findByText('Orpailleur')).toBeInTheDocument()
 
     await user.click(screen.getByText('Orpailleur'))
-    await user.click(screen.getByRole('button', { name: 'Valider' }))
     expect(await screen.findByText('filiere-page')).toBeInTheDocument()
   }, 15000)
 
@@ -92,6 +91,25 @@ describe('RoleSelectPage UX', () => {
 
     expect(await screen.findByText('Choisir votre role')).toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'Choisir' }))
+    expect(await screen.findByText('filiere-page')).toBeInTheDocument()
+  })
+
+  it('navigates immediately when clicking the role row itself', async () => {
+    getRbacFilieresMock.mockResolvedValue([
+      { code: 'OR', label: 'OR' },
+      { code: 'PIERRE', label: 'PIERRE' },
+      { code: 'BOIS', label: 'BOIS' },
+    ])
+    getRbacRolesMock.mockResolvedValue([
+      { code: 'acteur', label: 'Acteur', description: 'terrain', category: 'Administration', actor_type: 'USAGER', filiere_scope: ['OR'], tags: [], is_active: true, display_order: 1 },
+    ])
+    getRbacPermissionsMock.mockResolvedValue({ role: 'acteur', permissions: ['auth.login'] })
+
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('Choisir votre role')).toBeInTheDocument()
+    await user.click(await screen.findByTestId('role-row-acteur'))
     expect(await screen.findByText('filiere-page')).toBeInTheDocument()
   })
 })
