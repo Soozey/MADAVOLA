@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,6 +13,7 @@ export default function Layout() {
   const { selectedRole, selectedFiliere, changeProfile, changeFiliere, resetSession } = useSession()
   const location = useLocation()
   const navigate = useNavigate()
+  const [showAllModules, setShowAllModules] = useState(false)
 
   const userRoles = user?.roles?.map((r) => r.role) ?? []
   const isAdmin = userRoles.includes('admin')
@@ -52,8 +53,30 @@ export default function Layout() {
   const inferredItems = MENU_ITEMS.filter((item) => inferredPaths.has(item.path))
   const menuItems: MenuItem[] = staticMenuItems.length > 0 ? staticMenuItems : inferredItems
   const financePaths = new Set(['/transactions', '/trades', '/invoices', '/ledger'])
-  const financeItems = menuItems.filter((item) => financePaths.has(item.path))
-  const coreItems = menuItems.filter((item) => !financePaths.has(item.path))
+  const roleForUx = selectedMenuRole || effectiveRoles[0] || ''
+  const dailyPaths = useMemo(() => {
+    const map: Record<string, string[]> = {
+      orpailleur: ['/lots', '/transactions', '/ma-carte', '/notifications'],
+      collecteur: ['/lots', '/trades', '/transactions', '/notifications'],
+      commune: ['/actors', '/dashboard/commune', '/notifications'],
+      commune_agent: ['/actors', '/dashboard/commune', '/notifications'],
+      police: ['/verify', '/inspections', '/violations', '/notifications'],
+      gendarmerie: ['/verify', '/inspections', '/violations', '/notifications'],
+      controleur: ['/verify', '/inspections', '/violations', '/notifications'],
+      comptoir_operator: ['/lots', '/exports', '/documents', '/notifications'],
+      comptoir_compliance: ['/lots', '/exports', '/documents', '/notifications'],
+      comptoir_director: ['/lots', '/exports', '/documents', '/notifications'],
+      admin: menuItems.map((item) => item.path),
+      dirigeant: menuItems.map((item) => item.path),
+    }
+    const defaults = ['/lots', '/transactions', '/notifications']
+    return new Set(map[roleForUx] || defaults)
+  }, [menuItems, roleForUx])
+  const dailyItems = menuItems.filter((item) => dailyPaths.has(item.path))
+  const otherItems = menuItems.filter((item) => !dailyPaths.has(item.path))
+  const displayedItems = showAllModules ? menuItems : dailyItems
+  const financeItems = displayedItems.filter((item) => financePaths.has(item.path))
+  const coreItems = displayedItems.filter((item) => !financePaths.has(item.path))
 
   useEffect(() => {
     const path = location.pathname
@@ -99,6 +122,7 @@ export default function Layout() {
             <span>{'>'}</span>
             Accueil
           </Link>
+          <div className="nav-section-title">{showAllModules ? 'Modules' : 'Tâches du jour'}</div>
           {coreItems.map((item) => (
             <Link
               key={item.path}
@@ -123,6 +147,15 @@ export default function Layout() {
                 </Link>
               ))}
             </>
+          )}
+          {otherItems.length > 0 && (
+            <button
+              type="button"
+              className="nav-toggle-btn"
+              onClick={() => setShowAllModules((v) => !v)}
+            >
+              {showAllModules ? 'Masquer modules avancés' : 'Afficher tous les modules'}
+            </button>
           )}
         </nav>
         <div className="sidebar-footer">

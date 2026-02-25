@@ -22,7 +22,7 @@ export default function LedgerPage() {
 
   return (
     <div className="dashboard">
-      <h1>Grand livre</h1>
+      <h1>Historique des paiements</h1>
       <p className="dashboard-subtitle">
         Mouvements d inventaire (création, transfert) et soldes par acteur/lot.
       </p>

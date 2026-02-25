@@ -66,7 +66,7 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     path: '/trades',
-    label: 'Transactions avancées',
+    label: 'Transactions détaillées',
     icon: 'TRD',
     roles: ['admin', 'dirigeant', 'acteur', 'collecteur', 'orpailleur', 'pierre_exploitant', 'pierre_collecteur', 'pierre_lapidaire', 'pierre_exportateur', 'bois_exploitant', 'bois_collecteur', 'bois_transformateur', 'bois_artisan', 'bois_exportateur'],
   },
@@ -96,7 +96,7 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     path: '/ledger',
-    label: 'Grand livre',
+    label: 'Historique des paiements',
     icon: 'LED',
     roles: ['admin', 'dirigeant', 'commune_agent', 'acteur', 'orpailleur', 'collecteur', 'mmrs', 'com', 'com_admin', 'forets'],
   },
@@ -112,13 +112,13 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     path: '/audit',
-    label: 'Audit et traces',
+    label: 'Historique des actions',
     icon: 'AUD',
     roles: ['admin', 'dirigeant', 'bianco', 'com_admin'],
   },
   {
     path: '/inspections',
-    label: 'Contrôles / Inspections',
+    label: 'Contrôles terrain',
     icon: 'CTL',
     roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'forets', 'com_agent', 'pierre_controleur_mines', 'pierre_douanes'],
   },
@@ -130,13 +130,13 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     path: '/penalties',
-    label: 'Pénalités',
+    label: 'Sanctions',
     icon: 'PEN',
     roles: ['admin', 'dirigeant', 'mmrs', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'forets', 'com_admin'],
   },
   {
     path: '/verify',
-    label: 'Vérification acteur (QR)',
+    label: 'Scanner / Vérifier un QR',
     icon: 'VRF',
     roles: ['admin', 'dirigeant', 'dgd', 'douanes_agent', 'police', 'gendarmerie', 'commune_agent', 'transporteur'],
   },
@@ -166,13 +166,13 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     path: '/ops-coverage',
-    label: 'Couverture API/UI',
+    label: 'Diagnostic technique',
     icon: 'OPS',
     roles: ['admin', 'dirigeant', 'com_admin'],
   },
   {
     path: '/or-compliance',
-    label: 'Conformité OR',
+    label: 'Cartes et conformité OR',
     icon: 'OR',
     roles: [
       'admin', 'dirigeant', 'com', 'com_admin', 'com_agent', 'commune', 'commune_agent',

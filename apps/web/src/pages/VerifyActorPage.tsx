@@ -16,7 +16,7 @@ export default function VerifyActorPage() {
   if (!Number.isInteger(actorId)) {
     return (
       <div className="dashboard verify-page">
-        <h1>Vérification acteur</h1>
+        <h1>Scanner / Vérifier un QR</h1>
         <p className="error">ID acteur invalide.</p>
       </div>
     )
@@ -25,7 +25,7 @@ export default function VerifyActorPage() {
   if (error) {
     return (
       <div className="dashboard verify-page">
-        <h1>Vérification acteur</h1>
+        <h1>Scanner / Vérifier un QR</h1>
         <p className="error">Acteur introuvable ou erreur de chargement.</p>
       </div>
     )
@@ -36,7 +36,7 @@ export default function VerifyActorPage() {
 
   return (
     <div className="dashboard verify-page">
-      <h1>Vérification acteur (scan QR)</h1>
+      <h1>Scanner / Vérifier un QR</h1>
       <p className="dashboard-subtitle">Contrôleur : identité vérifiée via carte orpailleur/collecteur.</p>
       <div className="card verify-result-card">
         <div className="verify-badge">MADAVOLA</div>
