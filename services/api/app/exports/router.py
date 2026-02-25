@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor, require_roles
@@ -367,9 +367,9 @@ def list_exports(
     if status:
         query = query.filter(ExportDossier.status == status)
     if date_from:
-        query = query.filter(ExportDossier.created_at >= datetime.combine(date_from, datetime.min.time()))
+        query = query.filter(func.date(ExportDossier.created_at) >= date_from)
     if date_to:
-        query = query.filter(ExportDossier.created_at <= datetime.combine(date_to, datetime.max.time()))
+        query = query.filter(func.date(ExportDossier.created_at) <= date_to)
     if created_by_actor_id:
         if not (is_admin or is_dirigeant or is_export_authority):
             if created_by_actor_id != current_actor.id:
