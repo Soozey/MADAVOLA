@@ -38,3 +38,18 @@ class DashboardCommuneOut(BaseModel):
     transactions_total: float
     nb_acteurs: int
     nb_lots: int
+
+
+class HomeWidgetsOut(BaseModel):
+    gold_price_value: float | None = None
+    gold_price_currency: str = "MGA"
+    gold_price_unit: str = "g"
+    gold_price_source: str | None = None
+    gold_price_updated_at: str | None = None
+    institutional_message: str | None = None
+    institutional_message_version: int | None = None
+    institutional_message_updated_at: str | None = None
+
+
+class InstitutionalMessageIn(BaseModel):
+    message: str

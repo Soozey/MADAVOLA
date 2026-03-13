@@ -22,7 +22,7 @@ export default function DashboardCommunePage() {
     return (
       <div className="dashboard">
         <h1>Vue communale</h1>
-        <p className="empty-state">Vous n'avez pas les habilitations pour accÃ©der au dashboard communal.</p>
+        <p className="empty-state">Vous n'avez pas les habilitations pour accéder au dashboard communal.</p>
       </div>
     )
   }
@@ -31,7 +31,7 @@ export default function DashboardCommunePage() {
     return (
       <div className="dashboard">
         <h1>Vue communale</h1>
-        <p className="empty-state">Aucune commune associÃ©e Ã  votre profil.</p>
+        <p className="empty-state">Aucune commune associée à votre profil.</p>
       </div>
     )
   }
@@ -60,7 +60,7 @@ export default function DashboardCommunePage() {
           </div>
           <div className="stat-item">
             <div className="stat-value">{data.volume_created}</div>
-            <div className="stat-label">Volume crÃ©Ã©</div>
+            <div className="stat-label">Volume créé</div>
           </div>
           <div className="stat-item">
             <div className="stat-value">{data.transactions_total}</div>

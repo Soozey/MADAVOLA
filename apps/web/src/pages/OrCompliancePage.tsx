@@ -4,6 +4,16 @@ import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 
 type CardRequestKind = 'kara_orpailleur' | 'collector_collecteur' | 'collector_bijoutier'
+type UnifiedCard = {
+  id: number
+  card_type: 'kara_bolamena' | 'collector_card'
+  status: string
+  card_number?: string
+  role_label: string
+  fee_id?: number
+  expires_at?: string
+  validated_at?: string
+}
 
 export default function OrCompliancePage() {
   const queryClient = useQueryClient()
@@ -11,6 +21,10 @@ export default function OrCompliancePage() {
   const [requestKind, setRequestKind] = useState<CardRequestKind>('kara_orpailleur')
   const [cinInput, setCinInput] = useState('')
   const [queueStatus, setQueueStatus] = useState('pending')
+  const [selectedCardKey, setSelectedCardKey] = useState<string>('')
+  const [busyDoc, setBusyDoc] = useState(false)
+  const [message, setMessage] = useState('')
+  const [paymentRef, setPaymentRef] = useState('')
 
   const actorId = user?.id ?? 0
   const communeId = Number((user?.commune as unknown as { id?: number } | null)?.id ?? 0)
@@ -67,12 +81,21 @@ export default function OrCompliancePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['or-compliance'] })
+      setMessage('Demande envoyée.')
+    },
+    onError: (err: any) => {
+      setMessage(err?.response?.data?.detail?.message || 'Demande carte impossible.')
     },
   })
 
   const markFeePaidMutation = useMutation({
-    mutationFn: (feeId: number) => api.markFeePaid(feeId, { payment_ref: `self-${Date.now()}` }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['or-compliance'] }),
+    mutationFn: (feeId: number) => api.markFeePaid(feeId, { payment_ref: paymentRef.trim() || `self-${Date.now()}` }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['or-compliance'] })
+      setMessage('Paiement enregistré, en attente de validation communale.')
+      setPaymentRef('')
+    },
+    onError: (err: any) => setMessage(err?.response?.data?.detail?.message || 'Paiement impossible.'),
   })
 
   const decideMutation = useMutation({
@@ -80,22 +103,90 @@ export default function OrCompliancePage() {
       if (payload.cardType === 'kara_bolamena') return api.decideKaraCard(payload.cardId, payload.decision, 'decision_commune')
       return api.decideCollectorCard(payload.cardId, payload.decision, 'decision_commune')
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['or-compliance'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['or-compliance'] })
+      setMessage('Décision communale enregistrée.')
+    },
+    onError: (err: any) => setMessage(err?.response?.data?.detail?.message || 'Décision impossible.'),
   })
 
   const pendingFees = (myFees as any[]).filter((f) => f.status === 'pending')
   const karaCards = (myCards?.kara_cards || []) as any[]
   const collectorCards = (myCards?.collector_cards || []) as any[]
+  const allCards = useMemo<UnifiedCard[]>(() => {
+    const kara = karaCards.map((c: any) => ({
+      id: c.id,
+      card_type: 'kara_bolamena' as const,
+      status: c.status,
+      card_number: c.card_number,
+      role_label: 'Orpailleur',
+      fee_id: c.fee_id,
+      expires_at: c.expires_at,
+      validated_at: c.validated_at,
+    }))
+    const collector = collectorCards.map((c: any) => ({
+      id: c.id,
+      card_type: 'collector_card' as const,
+      status: c.status,
+      card_number: c.card_number,
+      role_label: c.role === 'bijoutier' ? 'Bijoutier' : 'Collecteur',
+      fee_id: c.fee_id,
+      expires_at: c.expires_at,
+      validated_at: c.validated_at,
+    }))
+    return [...kara, ...collector].sort((a, b) => b.id - a.id)
+  }, [karaCards, collectorCards])
+  const selectedCard = useMemo(() => {
+    if (allCards.length === 0) return null
+    if (!selectedCardKey) return allCards[0]
+    return allCards.find((card) => `${card.card_type}:${card.id}` === selectedCardKey) || allCards[0]
+  }, [allCards, selectedCardKey])
 
   const onSubmitRequest = (e: FormEvent) => {
     e.preventDefault()
     requestMutation.mutate()
   }
 
+  const withBlobDownload = async (documentId: number, triggerPrint: boolean) => {
+    const file = await api.downloadDocumentFile(documentId)
+    const url = URL.createObjectURL(file.blob)
+    if (triggerPrint) {
+      const popup = window.open(url, '_blank')
+      if (popup) {
+        popup.addEventListener('load', () => popup.print(), { once: true })
+      }
+      return
+    }
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = file.filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadCardPdf = async (side: 'front' | 'back', triggerPrint = false) => {
+    if (!selectedCard) return
+    setBusyDoc(true)
+    setMessage('')
+    try {
+      const render = await api.renderCard(selectedCard.id, { card_type: selectedCard.card_type, side })
+      if (!render?.document_id) throw new Error('document indisponible')
+      await withBlobDownload(render.document_id, triggerPrint)
+      setMessage(triggerPrint ? 'Impression lancee.' : `PDF ${side === 'front' ? 'recto' : 'verso'} telecharge.`)
+    } catch (err: any) {
+      setMessage(err?.response?.data?.detail?.message || 'Telechargement carte impossible.')
+    } finally {
+      setBusyDoc(false)
+    }
+  }
+
   return (
     <div className="dashboard">
       <h1>Demandes de cartes OR</h1>
       <p>Flux complet: demande acteur -&gt; paiement -&gt; validation commune -&gt; carte active dans le compte.</p>
+      {message && <p className={message.toLowerCase().includes('impossible') ? 'error' : 'success'}>{message}</p>}
 
       <div className="dashboard-grid">
         <div className="card">
@@ -137,6 +228,15 @@ export default function OrCompliancePage() {
 
         <div className="card">
           <h2>Mes frais a payer</h2>
+          <div className="form-group">
+            <label htmlFor="payment-ref">Reference paiement (wallet/banque)</label>
+            <input
+              id="payment-ref"
+              value={paymentRef}
+              onChange={(e) => setPaymentRef(e.target.value)}
+              placeholder="Ex: MVOLA-20260226-001"
+            />
+          </div>
           {pendingFees.length === 0 ? (
             <p>Aucun frais en attente.</p>
           ) : (
@@ -162,6 +262,39 @@ export default function OrCompliancePage() {
       <div className="dashboard-grid">
         <div className="card">
           <h2>Mes cartes (compte acteur)</h2>
+          <p style={{ marginBottom: 8 }}>Source unique pour vos cartes OR (remplace l'ancien ecran “Ma carte”).</p>
+          {allCards.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              <select
+                value={selectedCard ? `${selectedCard.card_type}:${selectedCard.id}` : ''}
+                onChange={(e) => setSelectedCardKey(e.target.value)}
+              >
+                {allCards.map((card) => (
+                  <option key={`${card.card_type}:${card.id}`} value={`${card.card_type}:${card.id}`}>
+                    {card.role_label} {card.card_number || `#${card.id}`} | {card.status}
+                  </option>
+                ))}
+              </select>
+              <button className="btn-secondary" disabled={busyDoc || !selectedCard} onClick={() => downloadCardPdf('front')}>
+                Télécharger PDF recto
+              </button>
+              <button className="btn-secondary" disabled={busyDoc || !selectedCard} onClick={() => downloadCardPdf('back')}>
+                Télécharger PDF verso
+              </button>
+              <button className="btn-secondary" disabled={busyDoc || !selectedCard} onClick={() => downloadCardPdf('front', true)}>
+                Imprimer
+              </button>
+              {selectedCard && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => window.open(`/api/v1/verify/card/${encodeURIComponent(selectedCard.card_number || String(selectedCard.id))}`, '_blank')}
+                >
+                  Vérifier QR/carte
+                </button>
+              )}
+            </div>
+          )}
+
           <h3>Kara-bolamena</h3>
           <ul className="home-list">
             {karaCards.length === 0 && <li>Aucune carte kara.</li>}

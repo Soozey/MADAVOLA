@@ -18,6 +18,8 @@ class FeeOut(BaseModel):
     currency: str
     status: str
     commune_mobile_money_msisdn: str | None = None
+    receipt_number: str | None = None
+    receipt_document_id: int | None = None
 
 
 class FeePaymentInitiate(BaseModel):
@@ -33,3 +35,11 @@ class FeePaymentOut(BaseModel):
     external_ref: str
     beneficiary_label: str | None = None
     beneficiary_msisdn: str | None = None
+
+
+class FeeStatusUpdate(BaseModel):
+    status: str  # pending | paid | cancelled
+
+
+class FeeActorMarkPaid(BaseModel):
+    payment_ref: str | None = None

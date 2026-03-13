@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import hashlib
+import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -7,9 +10,18 @@ from sqlalchemy.orm import Session
 from app.audit.logger import write_audit
 from app.auth.dependencies import get_current_actor, require_roles
 from app.common.errors import bad_request
+from app.common.receipts import build_simple_pdf
+from app.common.card_identity import (
+    build_card_number,
+    build_prefixed_uid,
+    canonical_json,
+    sha256_hex,
+    sign_hmac_sha256,
+)
 from app.core.config import settings
 from app.db import get_db
-from app.models.actor import Actor
+from app.models.actor import Actor, ActorRole
+from app.models.document import Document
 from app.models.fee import Fee
 from app.models.or_compliance import (
     CollectorAffiliationAgreement,
@@ -26,6 +38,9 @@ from app.models.territory import Commune, TerritoryVersion
 from app.or_compliance.reminders import run_expiry_reminders
 from app.or_compliance.schemas import (
     CardQueueItemOut,
+    CardRequestIn,
+    CardDecisionIn,
+    CardRenderOut,
     CollectorAffiliationCreate,
     CollectorCardCreate,
     CollectorCardDecision,
@@ -58,6 +73,40 @@ COLLECTOR_REQUIRED_DOCS = [
     "photo_4x4_2",
 ]
 
+STATUS_PENDING_PAYMENT = "pending_payment"
+STATUS_PENDING_VALIDATION = "pending_validation"
+STATUS_VALIDATED = "validated"
+STATUS_REJECTED = "rejected"
+STATUS_EXPIRED = "expired"
+STATUS_SUSPENDED = "suspended"
+STATUS_REVOKED = "revoked"
+
+
+def _display_status(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if raw in {"active", STATUS_VALIDATED}:
+        return STATUS_VALIDATED
+    if raw in {"pending", STATUS_PENDING_PAYMENT}:
+        return STATUS_PENDING_PAYMENT
+    if raw in {STATUS_PENDING_VALIDATION}:
+        return STATUS_PENDING_VALIDATION
+    if raw in {"withdrawn", STATUS_REVOKED}:
+        return STATUS_REVOKED
+    if raw in {STATUS_REJECTED, STATUS_EXPIRED, STATUS_SUSPENDED}:
+        return raw
+    return STATUS_PENDING_PAYMENT
+
+
+def _storage_status(value: str) -> str:
+    display = _display_status(value)
+    if display == STATUS_VALIDATED:
+        return "active"
+    if display == STATUS_REVOKED:
+        return "withdrawn"
+    if display == STATUS_PENDING_PAYMENT:
+        return "pending"
+    return display
+
 
 def _tariff_amount(db: Session, card_type: str, commune_id: int | None, now: datetime) -> Decimal:
     rows = (
@@ -87,8 +136,10 @@ def _to_kara_out(card: KaraBolamenaCard) -> KaraCardOut:
         id=card.id,
         actor_id=card.actor_id,
         commune_id=card.commune_id,
+        card_uid=card.card_uid,
+        card_number=card.card_number,
         unique_identifier=card.unique_identifier,
-        status=card.status,
+        status=_display_status(card.status),
         cin=card.cin,
         nationality=card.nationality,
         residence_verified=card.residence_verified,
@@ -97,7 +148,14 @@ def _to_kara_out(card: KaraBolamenaCard) -> KaraCardOut:
         public_order_clear=card.public_order_clear,
         fee_id=card.fee_id,
         issued_at=card.issued_at,
+        validated_at=card.validated_at,
         expires_at=card.expires_at,
+        revoked_at=card.revoked_at,
+        qr_value=card.qr_value,
+        qr_payload_hash=card.qr_payload_hash,
+        qr_signature=card.qr_signature,
+        front_document_id=card.front_document_id,
+        back_document_id=card.back_document_id,
     )
 
 
@@ -106,13 +164,23 @@ def _to_collector_out(card: CollectorCard) -> CollectorCardOut:
         id=card.id,
         actor_id=card.actor_id,
         issuing_commune_id=card.issuing_commune_id,
-        status=card.status,
+        card_uid=card.card_uid,
+        card_number=card.card_number,
+        role="bijoutier" if _is_bijoutier_card(card) else "collecteur",
+        status=_display_status(card.status),
         fee_id=card.fee_id,
         issued_at=card.issued_at,
+        validated_at=card.validated_at,
         expires_at=card.expires_at,
+        revoked_at=card.revoked_at,
         affiliation_deadline_at=card.affiliation_deadline_at,
         affiliation_submitted_at=card.affiliation_submitted_at,
         laissez_passer_blocked_reason=card.laissez_passer_blocked_reason,
+        qr_value=card.qr_value,
+        qr_payload_hash=card.qr_payload_hash,
+        qr_signature=card.qr_signature,
+        front_document_id=card.front_document_id,
+        back_document_id=card.back_document_id,
     )
 
 
@@ -168,6 +236,102 @@ def list_tariffs(db: Session = Depends(get_db), _actor=Depends(get_current_actor
     ]
 
 
+@router.post("/cards/request", status_code=201)
+def request_card(
+    payload: CardRequestIn,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    card_type = (payload.card_type or "").strip().lower()
+    if card_type == "kara_bolamena":
+        if not payload.cin:
+            raise bad_request("cin_obligatoire")
+        return request_kara_card(
+            KaraCardCreate(
+                actor_id=payload.actor_id,
+                commune_id=payload.commune_id,
+                cin=payload.cin,
+                notes=payload.notes,
+            ),
+            db,
+            current_actor,
+        )
+    if card_type in {"collector_card", "bijoutier_card"}:
+        notes = payload.notes
+        if card_type == "bijoutier_card":
+            notes = ((notes or "") + " [role=bijoutier]").strip()
+        return request_collector_card(
+            CollectorCardCreate(
+                actor_id=payload.actor_id,
+                issuing_commune_id=payload.commune_id,
+                notes=notes,
+            ),
+            db,
+            current_actor,
+        )
+    raise bad_request("type_carte_invalide")
+
+
+@router.post("/cards/{card_id}/validate")
+def validate_card(
+    card_id: int,
+    payload: CardDecisionIn,
+    card_type: str = "kara_bolamena",
+    db: Session = Depends(get_db),
+    current_actor=Depends(require_roles({"admin", "dirigeant", "commune", "commune_agent", "com_admin", "com_agent", "com"})),
+):
+    normalized = (card_type or "").strip().lower()
+    if normalized == "kara_bolamena":
+        return decide_kara_card(
+            card_id=card_id,
+            payload=KaraCardDecision(decision=payload.decision, notes=payload.notes),
+            db=db,
+            current_actor=current_actor,
+        )
+    if normalized in {"collector_card", "bijoutier_card"}:
+        return decide_collector_card(
+            card_id=card_id,
+            payload=CollectorCardDecision(decision=payload.decision, notes=payload.notes),
+            db=db,
+            current_actor=current_actor,
+        )
+    raise bad_request("type_carte_invalide")
+
+
+@router.get("/cards/{card_id}/render", response_model=CardRenderOut)
+def render_card_side(
+    card_id: int,
+    side: str = "front",
+    card_type: str = "kara_bolamena",
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    resolved = _load_card_by_type(db, card_type, card_id)
+    if not resolved:
+        raise bad_request("carte_introuvable")
+    kind, card = resolved
+    actor_id = card.actor_id
+    if not _is_actor_allowed_for_card(db, current_actor.id, actor_id):
+        raise bad_request("acces_refuse")
+    _ensure_card_documents(db, card, kind)
+    db.commit()
+    if side not in {"front", "back"}:
+        raise bad_request("side_invalide")
+    document_id = card.front_document_id if side == "front" else card.back_document_id
+    return CardRenderOut(
+        card_id=card.id,
+        card_type=kind,
+        side=side,
+        status=_display_status(card.status),
+        card_number=card.card_number,
+        document_id=document_id,
+        download_url=f"{settings.api_prefix}/documents/{document_id}/download" if document_id else None,
+        qr_value=card.qr_value,
+        qr_payload_hash=card.qr_payload_hash,
+        qr_signature=card.qr_signature,
+    )
+
+
 @router.post("/kara-cards", response_model=KaraCardOut, status_code=201)
 def request_kara_card(
     payload: KaraCardCreate,
@@ -194,11 +358,23 @@ def request_kara_card(
     db.add(fee)
     db.flush()
 
+    commune = db.query(Commune).filter_by(id=payload.commune_id).first()
+    commune_code = commune.code if commune else "COMM"
+    card_uid = build_prefixed_uid("MDV-CARD")
+    card_number = build_card_number(
+        filiere="OR",
+        commune_code=commune_code,
+        seq=_next_card_sequence(db, payload.commune_id, now),
+        now=now,
+    )
+
     card = KaraBolamenaCard(
         actor_id=payload.actor_id,
         commune_id=payload.commune_id,
+        card_uid=card_uid,
+        card_number=card_number,
         unique_identifier=f"KARA-{now.strftime('%Y%m%d')}-{payload.actor_id}-{fee.id}",
-        status="pending",
+        status=_storage_status(STATUS_PENDING_PAYMENT),
         nationality=(payload.nationality or "mg").lower(),
         cin=payload.cin,
         residence_verified=payload.residence_verified,
@@ -241,7 +417,8 @@ def list_kara_cards(
     else:
         query = query.filter(KaraBolamenaCard.actor_id == current_actor.id)
     if status:
-        query = query.filter(KaraBolamenaCard.status == status)
+        mapped = _storage_status(status)
+        query = query.filter(KaraBolamenaCard.status == mapped)
     rows = query.order_by(KaraBolamenaCard.created_at.desc()).all()
     return [_to_kara_out(row) for row in rows]
 
@@ -257,7 +434,7 @@ def decide_kara_card(
     if not card:
         raise bad_request("carte_introuvable")
     decision = (payload.decision or "").strip().lower()
-    if decision not in {"approved", "rejected", "suspended", "withdrawn"}:
+    if decision not in {"approved", "rejected", "suspended", "withdrawn", "revoked"}:
         raise bad_request("decision_invalide")
 
     if decision == "approved":
@@ -269,12 +446,23 @@ def decide_kara_card(
         if not fee or fee.status != "paid":
             raise bad_request("frais_ouverture_non_payes")
         now = datetime.now(timezone.utc)
-        card.status = "active"
+        card.status = _storage_status(STATUS_VALIDATED)
         card.issued_by_actor_id = current_actor.id
+        card.validated_by_actor_id = current_actor.id
         card.issued_at = now
+        card.validated_at = now
         card.expires_at = now + timedelta(days=365)
+        card.revoked_at = None
+        _refresh_kara_qr(card, db)
+        _ensure_card_documents(db, card, card_type="kara_bolamena")
     else:
-        card.status = "rejected" if decision == "rejected" else decision
+        if decision in {"withdrawn", "revoked"}:
+            card.status = _storage_status(STATUS_REVOKED)
+            card.revoked_at = datetime.now(timezone.utc)
+        elif decision == "rejected":
+            card.status = _storage_status(STATUS_REJECTED)
+        else:
+            card.status = _storage_status(decision)
     if payload.notes:
         card.notes = payload.notes
     write_audit(
@@ -299,7 +487,7 @@ def create_production_log(
     card = db.query(KaraBolamenaCard).filter_by(id=payload.card_id).first()
     if not card:
         raise bad_request("carte_introuvable")
-    if card.status != "active":
+    if _display_status(card.status) != STATUS_VALIDATED:
         raise bad_request("carte_invalide")
     if current_actor.id != card.actor_id:
         raise bad_request("acces_refuse")
@@ -366,12 +554,26 @@ def request_collector_card(
     )
     db.add(fee)
     db.flush()
+    commune = db.query(Commune).filter_by(id=payload.issuing_commune_id).first()
+    commune_code = commune.code if commune else "COMM"
+    card_uid = build_prefixed_uid("MDV-CARD")
+    actor_roles = _active_roles(db, payload.actor_id)
+    role_hint = "bijoutier" if ("bijoutier" in actor_roles or "bijoutier" in (payload.notes or "").lower()) else "collecteur"
+    card_number = build_card_number(
+        filiere="OR",
+        commune_code=commune_code,
+        seq=_next_card_sequence(db, payload.issuing_commune_id, now),
+        now=now,
+    )
     card = CollectorCard(
         actor_id=payload.actor_id,
         issuing_commune_id=payload.issuing_commune_id,
-        status="pending",
+        card_uid=card_uid,
+        card_number=card_number,
+        status=_storage_status(STATUS_PENDING_PAYMENT),
         fee_id=fee.id,
         laissez_passer_blocked_reason="affiliation_non_communiquee",
+        qr_value=f"role={role_hint}",
     )
     db.add(card)
     db.flush()
@@ -381,8 +583,8 @@ def request_collector_card(
                 collector_card_id=card.id,
                 doc_type=doc_type,
                 required=True,
-                status="uploaded",
-                notes="declaration_initiale_acteur",
+                status="missing",
+                notes="piece_a_fournir",
             )
         )
     write_audit(
@@ -417,7 +619,8 @@ def list_collector_cards(
     else:
         query = query.filter(CollectorCard.actor_id == current_actor.id)
     if status:
-        query = query.filter(CollectorCard.status == status)
+        mapped = _storage_status(status)
+        query = query.filter(CollectorCard.status == mapped)
     rows = query.order_by(CollectorCard.created_at.desc()).all()
     return [_to_collector_out(row) for row in rows]
 
@@ -459,7 +662,7 @@ def decide_collector_card(
     if not card:
         raise bad_request("carte_introuvable")
     decision = (payload.decision or "").strip().lower()
-    if decision not in {"approved", "rejected", "suspended", "withdrawn"}:
+    if decision not in {"approved", "rejected", "suspended", "withdrawn", "revoked"}:
         raise bad_request("decision_invalide")
     if decision == "approved":
         missing_required = (
@@ -477,13 +680,24 @@ def decide_collector_card(
         if not fee or fee.status != "paid":
             raise bad_request("frais_ouverture_non_payes")
         now = datetime.now(timezone.utc)
-        card.status = "active"
+        card.status = _storage_status(STATUS_VALIDATED)
         card.issued_by_actor_id = current_actor.id
+        card.validated_by_actor_id = current_actor.id
         card.issued_at = now
+        card.validated_at = now
         card.expires_at = now + timedelta(days=365)
         card.affiliation_deadline_at = now + timedelta(days=90)
+        card.revoked_at = None
+        _refresh_collector_qr(card, db)
+        _ensure_card_documents(db, card, card_type="collector_card")
     else:
-        card.status = "rejected" if decision == "rejected" else decision
+        if decision in {"withdrawn", "revoked"}:
+            card.status = _storage_status(STATUS_REVOKED)
+            card.revoked_at = datetime.now(timezone.utc)
+        elif decision == "rejected":
+            card.status = _storage_status(STATUS_REJECTED)
+        else:
+            card.status = _storage_status(decision)
     if payload.notes:
         card.laissez_passer_blocked_reason = payload.notes
     db.commit()
@@ -516,7 +730,7 @@ def get_my_cards(
 
 @router.get("/cards/commune-queue", response_model=list[CardQueueItemOut])
 def get_commune_queue(
-    status: str = "pending",
+    status: str = STATUS_PENDING_VALIDATION,
     commune_id: int | None = None,
     db: Session = Depends(get_db),
     current_actor=Depends(require_roles({"admin", "dirigeant", "commune", "commune_agent", "com", "com_admin", "com_agent"})),
@@ -527,18 +741,27 @@ def get_commune_queue(
     if target_commune and not _is_active_commune(db, target_commune):
         raise bad_request("commune_invalide")
 
+    normalized_status = (status or "").strip().lower()
+    include_pending_both = normalized_status == "pending"
+    filter_status = _storage_status(status)
     kara_rows = (
         db.query(KaraBolamenaCard, Fee, Actor)
         .join(Fee, Fee.id == KaraBolamenaCard.fee_id, isouter=True)
         .join(Actor, Actor.id == KaraBolamenaCard.actor_id)
-        .filter(KaraBolamenaCard.commune_id == target_commune, KaraBolamenaCard.status == status)
+        .filter(
+            KaraBolamenaCard.commune_id == target_commune,
+            KaraBolamenaCard.status.in_(["pending", "pending_validation"]) if include_pending_both else KaraBolamenaCard.status == filter_status,
+        )
         .all()
     )
     collector_rows = (
         db.query(CollectorCard, Fee, Actor)
         .join(Fee, Fee.id == CollectorCard.fee_id, isouter=True)
         .join(Actor, Actor.id == CollectorCard.actor_id)
-        .filter(CollectorCard.issuing_commune_id == target_commune, CollectorCard.status == status)
+        .filter(
+            CollectorCard.issuing_commune_id == target_commune,
+            CollectorCard.status.in_(["pending", "pending_validation"]) if include_pending_both else CollectorCard.status == filter_status,
+        )
         .all()
     )
     out: list[CardQueueItemOut] = []
@@ -549,7 +772,7 @@ def get_commune_queue(
                 card_type="kara_bolamena",
                 actor_id=card.actor_id,
                 commune_id=card.commune_id,
-                status=card.status,
+                status=_display_status(card.status),
                 fee_id=card.fee_id,
                 fee_status=fee.status if fee else None,
                 created_at=card.created_at,
@@ -563,7 +786,7 @@ def get_commune_queue(
                 card_type="collector_card",
                 actor_id=card.actor_id,
                 commune_id=card.issuing_commune_id,
-                status=card.status,
+                status=_display_status(card.status),
                 fee_id=card.fee_id,
                 fee_status=fee.status if fee else None,
                 created_at=card.created_at,
@@ -771,6 +994,265 @@ def list_notifications(
         }
         for row in rows
     ]
+
+
+def mark_cards_pending_validation_for_fee(db: Session, fee_id: int) -> None:
+    if not fee_id:
+        return
+    kara = db.query(KaraBolamenaCard).filter(KaraBolamenaCard.fee_id == fee_id).all()
+    for card in kara:
+        if _display_status(card.status) == STATUS_PENDING_PAYMENT:
+            card.status = _storage_status(STATUS_PENDING_VALIDATION)
+    collector = db.query(CollectorCard).filter(CollectorCard.fee_id == fee_id).all()
+    for card in collector:
+        if _display_status(card.status) == STATUS_PENDING_PAYMENT:
+            card.status = _storage_status(STATUS_PENDING_VALIDATION)
+
+
+def _load_card_by_type(db: Session, card_type: str, card_id: int):
+    normalized = (card_type or "").strip().lower()
+    if normalized in {"kara_bolamena", "kara"}:
+        card = db.query(KaraBolamenaCard).filter_by(id=card_id).first()
+        return ("kara_bolamena", card) if card else None
+    if normalized in {"collector_card", "bijoutier_card", "collector"}:
+        card = db.query(CollectorCard).filter_by(id=card_id).first()
+        return ("collector_card", card) if card else None
+    return None
+
+
+def _is_actor_allowed_for_card(db: Session, requester_actor_id: int, owner_actor_id: int) -> bool:
+    if requester_actor_id == owner_actor_id:
+        return True
+    if (
+        db.query(ActorRole.id)
+        .filter(ActorRole.actor_id == requester_actor_id, ActorRole.role.in_(["admin", "dirigeant", "com", "com_admin", "com_agent"]))
+        .first()
+        is not None
+    ):
+        return True
+    requester = db.query(Actor).filter_by(id=requester_actor_id).first()
+    owner = db.query(Actor).filter_by(id=owner_actor_id).first()
+    if not requester or not owner:
+        return False
+    return (
+        requester.commune_id == owner.commune_id
+        and db.query(ActorRole.id).filter(ActorRole.actor_id == requester_actor_id, ActorRole.role == "commune_agent").first() is not None
+    )
+
+
+def _active_roles(db: Session, actor_id: int) -> set[str]:
+    rows = (
+        db.query(ActorRole.role)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.status == "active")
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
+def _is_bijoutier_card(card: CollectorCard) -> bool:
+    qr_value = card.qr_value or ""
+    notes = card.laissez_passer_blocked_reason or ""
+    payload = card.qr_payload_json or ""
+    return (
+        "role=bijoutier" in qr_value
+        or '"role":"bijoutier"' in qr_value
+        or "bijoutier" in notes.lower()
+        or '"role":"bijoutier"' in payload
+    )
+
+
+def _next_card_sequence(db: Session, commune_id: int, now: datetime) -> int:
+    kara_count = db.query(KaraBolamenaCard.id).filter(KaraBolamenaCard.commune_id == commune_id).count()
+    collector_count = db.query(CollectorCard.id).filter(CollectorCard.issuing_commune_id == commune_id).count()
+    # Reserve monotonic sequence per commune/year without destructive renumbering.
+    return max(1, kara_count + collector_count + 1)
+
+
+def _card_payload(db: Session, *, card_type: str, card, actor_id: int, commune_id: int, role: str, filiere: str = "OR") -> dict:
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    commune = db.query(Commune).filter_by(id=commune_id).first()
+    payload = {
+        "v": 1,
+        "type": "MADAVOLA_CARD",
+        "card_type": card_type,
+        "card_id": card.id,
+        "card_number": card.card_number,
+        "actor_id": actor_id,
+        "full_name": f"{actor.nom} {actor.prenoms or ''}".strip() if actor else f"ACT-{actor_id}",
+        "dob": actor.date_naissance.isoformat() if actor and actor.date_naissance else None,
+        "filiere": filiere,
+        "role": role,
+        "commune_code": commune.code if commune else None,
+        "status": _display_status(card.status),
+        "validated_at": card.validated_at.isoformat() if card.validated_at else None,
+        "expires_at": card.expires_at.isoformat() if card.expires_at else None,
+    }
+    canonical = canonical_json(payload)
+    payload_hash = sha256_hex(canonical)
+    signing_secret = settings.card_qr_signing_secret or settings.jwt_secret
+    signature = sign_hmac_sha256(signing_secret, payload_hash)
+    payload["qr_hash"] = payload_hash
+    payload["sig"] = signature
+    return payload
+
+
+def _refresh_kara_qr(card: KaraBolamenaCard, db: Session) -> None:
+    payload = _card_payload(
+        db,
+        card_type="kara_bolamena",
+        card=card,
+        actor_id=card.actor_id,
+        commune_id=card.commune_id,
+        role="orpailleur",
+        filiere="OR",
+    )
+    card.qr_payload_json = canonical_json(payload)
+    card.qr_payload_hash = payload["qr_hash"]
+    card.qr_signature = payload["sig"]
+    card.qr_value = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+
+
+def _refresh_collector_qr(card: CollectorCard, db: Session) -> None:
+    role = "bijoutier" if _is_bijoutier_card(card) else "collecteur"
+    payload = _card_payload(
+        db,
+        card_type="collector_card",
+        card=card,
+        actor_id=card.actor_id,
+        commune_id=card.issuing_commune_id,
+        role=role,
+        filiere="OR",
+    )
+    card.qr_payload_json = canonical_json(payload)
+    card.qr_payload_hash = payload["qr_hash"]
+    card.qr_signature = payload["sig"]
+    card.qr_value = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+
+
+def _ensure_card_documents(db: Session, card, card_type: str) -> None:
+    actor = db.query(Actor).filter_by(id=card.actor_id).first()
+    commune_id = card.commune_id if card_type == "kara_bolamena" else card.issuing_commune_id
+    commune = db.query(Commune).filter_by(id=commune_id).first()
+    full_name = f"{actor.nom} {actor.prenoms or ''}".strip() if actor else f"Acteur {card.actor_id}"
+    status = _display_status(card.status)
+    role_label = "Orpailleur" if card_type == "kara_bolamena" else ("Bijoutier" if _is_bijoutier_card(card) else "Collecteur")
+    commune_label = commune.name if commune else f"Commune {commune_id}"
+    qr_short = card.qr_payload_hash or "-"
+    cin_raw = actor.cin if actor else None
+    cin_digits = "".join(ch for ch in (cin_raw or "") if ch.isdigit())
+    cin_display = " ".join([cin_digits[i:i + 3] for i in range(0, len(cin_digits), 3)]) if cin_digits else "-"
+    date_naissance = actor.date_naissance.isoformat() if actor and actor.date_naissance else "-"
+    cin_delivrance = actor.cin_date_delivrance.isoformat() if actor and actor.cin_date_delivrance else "-"
+    adresse = actor.adresse_text if actor and actor.adresse_text else "-"
+    verified_ref = card.card_number or str(card.id)
+
+    front_lines = [
+        f"Nom: {full_name}",
+        f"Ne(e) le: {date_naissance}",
+        f"Adresse: {adresse}",
+        f"CIN: {cin_display}",
+        f"Delivrance CIN: {cin_delivrance}",
+        f"Carte: {card.card_number or '-'}",
+        f"Role: {role_label} | Filiere: OR",
+        f"Emission: {card.issued_at.isoformat() if card.issued_at else '-'}",
+        f"Validite: {card.expires_at.isoformat() if card.expires_at else '-'}",
+        f"Commune: {commune_label}",
+    ]
+    back_lines = [
+        f"Numero carte: {card.card_number or '-'}",
+        f"Card UID: {card.card_uid or '-'}",
+        f"Statut: {status}",
+        f"QR Hash: {qr_short}",
+        f"Signature: {card.qr_signature or '-'}",
+        f"Verification: {settings.api_prefix}/verify/card/{verified_ref}",
+    ]
+    # ISO/IEC 7810 ID-1 (85.60 x 53.98 mm) in PDF points.
+    page_width_pt = 243
+    page_height_pt = 153
+    front_bytes = build_simple_pdf(
+        "MADAVOLA - Carte OR",
+        front_lines,
+        page_width_pt=page_width_pt,
+        page_height_pt=page_height_pt,
+        start_x=10,
+        start_y=140,
+        line_height=10,
+        font_size=8,
+    )
+    back_bytes = build_simple_pdf(
+        "MADAVOLA - Verification",
+        back_lines,
+        page_width_pt=page_width_pt,
+        page_height_pt=page_height_pt,
+        start_x=10,
+        start_y=140,
+        line_height=10,
+        font_size=8,
+    )
+
+    owner_actor_id = card.actor_id
+    front_doc_id = _upsert_document_blob(
+        db,
+        existing_document_id=card.front_document_id,
+        doc_type="card_front",
+        owner_actor_id=owner_actor_id,
+        related_entity_type="card",
+        related_entity_id=f"{card_type}:{card.id}:front",
+        filename=f"card-{card_type}-{card.id}-front.pdf",
+        content=front_bytes,
+    )
+    back_doc_id = _upsert_document_blob(
+        db,
+        existing_document_id=card.back_document_id,
+        doc_type="card_back",
+        owner_actor_id=owner_actor_id,
+        related_entity_type="card",
+        related_entity_id=f"{card_type}:{card.id}:back",
+        filename=f"card-{card_type}-{card.id}-back.pdf",
+        content=back_bytes,
+    )
+    card.front_document_id = front_doc_id
+    card.back_document_id = back_doc_id
+
+
+def _upsert_document_blob(
+    db: Session,
+    *,
+    existing_document_id: int | None,
+    doc_type: str,
+    owner_actor_id: int,
+    related_entity_type: str,
+    related_entity_id: str,
+    filename: str,
+    content: bytes,
+) -> int:
+    storage_dir = Path(settings.document_storage_dir)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    path = storage_dir / filename
+    path.write_bytes(content)
+    sha256 = hashlib.sha256(content).hexdigest()
+    document = db.query(Document).filter_by(id=existing_document_id).first() if existing_document_id else None
+    if not document:
+        document = Document(
+            doc_type=doc_type,
+            owner_actor_id=owner_actor_id,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+            storage_path=str(path),
+            original_filename=filename,
+            sha256=sha256,
+        )
+        db.add(document)
+        db.flush()
+        return int(document.id)
+    document.doc_type = doc_type
+    document.owner_actor_id = owner_actor_id
+    document.related_entity_type = related_entity_type
+    document.related_entity_id = related_entity_id
+    document.storage_path = str(path)
+    document.original_filename = filename
+    document.sha256 = sha256
+    return int(document.id)
 
 
 def _is_active_commune(db: Session, commune_id: int | None) -> bool:

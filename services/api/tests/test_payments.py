@@ -4,6 +4,7 @@ from app.auth.security import hash_password
 from app.models.actor import Actor, ActorAuth
 from app.models.fee import Fee
 from app.models.document import Document
+from app.models.invoice import Invoice
 from app.models.payment import PaymentProvider, PaymentRequest, WebhookInbox
 from app.models.transaction import TradeTransaction
 from app.models.territory import Commune, District, Region, TerritoryVersion
@@ -149,7 +150,14 @@ def test_payment_initiate_and_webhook_idempotent(client, db_session):
     db_session.refresh(fee)
     assert fee.status == "paid"
     db_session.refresh(transaction)
-    assert transaction.status == "paid"
+    assert transaction.status in {"paid", "transferred"}
+    invoice = db_session.query(Invoice).filter(Invoice.transaction_id == transaction.id).first()
+    assert invoice is not None
+    assert invoice.invoice_number.startswith("FAC-")
+    assert invoice.invoice_hash is not None
+    assert invoice.internal_signature is not None
+    assert invoice.receipt_number is not None
+    assert invoice.receipt_document_id is not None
     document = db_session.query(Document).filter_by(related_entity_type="invoice").first()
     assert document is not None
 

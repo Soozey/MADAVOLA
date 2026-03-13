@@ -1,13 +1,20 @@
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.common.errors import bad_request
+from app.common.card_identity import (
+    build_invoice_number,
+    build_receipt_number,
+    canonical_json,
+    sha256_hex,
+    sign_hmac_sha256,
+)
 from app.core.config import settings
 from app.db import get_db
 from app.audit.logger import write_audit
@@ -18,15 +25,19 @@ from app.models.fee import Fee
 from app.models.invoice import Invoice
 from app.models.document import Document
 from app.models.lot import InventoryLedger, Lot
+from app.models.or_compliance import CollectorCard, KaraBolamenaCard
 from app.models.payment import Payment, PaymentProvider, PaymentRequest, WebhookInbox
+from app.models.tax import TaxRecord
+from app.models.territory import Region
 from app.models.transaction import TradeTransaction, TradeTransactionItem
+from app.or_compliance.fee_split import allocate_collector_card_fee_split
 from app.payments.schemas import (
     PaymentInitiate,
     PaymentInitiateResponse,
     PaymentRequestOut,
     WebhookPayload,
 )
-from app.common.receipts import build_qr_value
+from app.common.receipts import build_qr_value, build_simple_pdf
 
 router = APIRouter(prefix=f"{settings.api_prefix}/payments", tags=["payments"])
 
@@ -170,6 +181,9 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
             if fee and fee.status != "paid":
                 fee.status = "paid"
                 fee.paid_at = datetime.now(timezone.utc)
+                allocate_collector_card_fee_split(db, fee)
+                _sync_card_status_after_fee_paid(db, fee.id)
+                _ensure_fee_receipt_document(db, fee, payment_request)
                 actor = db.query(Actor).filter_by(id=fee.actor_id).first()
                 if actor and actor.status == "pending":
                     activation_mode = _get_signup_activation_mode(db)
@@ -189,52 +203,14 @@ async def webhook(provider_code: str, request: Request, db: Session = Depends(ge
                 .filter_by(id=payment_request.transaction_id)
                 .first()
             )
-            if transaction and transaction.status != "paid":
-                transaction.status = "paid"
-                invoice_number = f"INV-{transaction.id:08d}"
-                invoice = Invoice(
-                    invoice_number=invoice_number,
-                    transaction_id=transaction.id,
-                    seller_actor_id=transaction.seller_actor_id,
-                    buyer_actor_id=transaction.buyer_actor_id,
-                    total_amount=transaction.total_amount,
-                    status="issued",
-                    qr_code=build_qr_value("invoice", invoice_number),
-                )
-                db.add(invoice)
-                _apply_transaction_lot_transfer(db, transaction)
-                storage_dir = Path(settings.document_storage_dir)
-                storage_dir.mkdir(parents=True, exist_ok=True)
-                invoice_payload = {
-                    "invoice_number": invoice_number,
-                    "transaction_id": transaction.id,
-                    "seller_actor_id": transaction.seller_actor_id,
-                    "buyer_actor_id": transaction.buyer_actor_id,
-                    "total_amount": str(transaction.total_amount),
-                    "currency": transaction.currency,
-                }
-                content = json.dumps(invoice_payload, ensure_ascii=True).encode()
-                sha256 = hashlib.sha256(content).hexdigest()
-                filename = f"{invoice_number}.json"
-                storage_path = storage_dir / filename
-                storage_path.write_bytes(content)
-                db.add(
-                    Document(
-                        doc_type="invoice",
-                        owner_actor_id=transaction.seller_actor_id,
-                        related_entity_type="invoice",
-                        related_entity_id=invoice_number,
-                        storage_path=str(storage_path),
-                        original_filename=filename,
-                        sha256=sha256,
-                    )
-                )
+            if transaction and transaction.status not in {"paid", "transferred"}:
+                _finalize_transaction_success(db, transaction, payment_request)
                 write_audit(
                     db,
                     actor_id=transaction.buyer_actor_id,
                     action="invoice_issued",
-                    entity_type="invoice",
-                    entity_id=invoice_number,
+                    entity_type="transaction",
+                    entity_id=str(transaction.id),
                     meta={"transaction_id": transaction.id},
                 )
         if parsed.status == "success":
@@ -370,6 +346,325 @@ def _get_signup_activation_mode(db: Session) -> str:
 
 def _has_minimal_signup_controls(actor: Actor) -> bool:
     return bool(actor.region_id and actor.district_id and actor.commune_id and actor.signup_geo_point_id)
+
+
+def _sync_card_status_after_fee_paid(db: Session, fee_id: int) -> None:
+    for card in db.query(KaraBolamenaCard).filter(KaraBolamenaCard.fee_id == fee_id).all():
+        if (card.status or "").lower() == "pending":
+            card.status = "pending_validation"
+    for card in db.query(CollectorCard).filter(CollectorCard.fee_id == fee_id).all():
+        if (card.status or "").lower() == "pending":
+            card.status = "pending_validation"
+
+
+def _ensure_fee_receipt_document(db: Session, fee: Fee, payment_request: PaymentRequest) -> None:
+    if fee.receipt_document_id and fee.receipt_number:
+        return
+    now = datetime.now(timezone.utc)
+    receipt_number = build_receipt_number(fee.id, now)
+    lines = [
+        f"Recu: {receipt_number}",
+        f"Frais: {fee.fee_type}",
+        f"Acteur payeur: {fee.actor_id}",
+        f"Commune beneficiaire: {fee.commune_id}",
+        f"Montant: {float(fee.amount):.2f} {fee.currency}",
+        f"Canal: {payment_request.provider_id}",
+        f"Reference externe: {payment_request.external_ref}",
+        f"Date confirmation: {now.isoformat()}",
+    ]
+    content = build_simple_pdf("MADAVOLA - Recu paiement", lines)
+    storage_dir = Path(settings.document_storage_dir)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{receipt_number}.pdf"
+    storage_path = storage_dir / filename
+    storage_path.write_bytes(content)
+    sha256 = hashlib.sha256(content).hexdigest()
+    doc = Document(
+        doc_type="receipt",
+        owner_actor_id=fee.actor_id,
+        related_entity_type="fee",
+        related_entity_id=str(fee.id),
+        storage_path=str(storage_path),
+        original_filename=filename,
+        sha256=sha256,
+    )
+    db.add(doc)
+    db.flush()
+    fee.receipt_number = receipt_number
+    fee.receipt_document_id = doc.id
+
+
+def _transaction_context(db: Session, transaction: TradeTransaction) -> dict:
+    items = (
+        db.query(TradeTransactionItem)
+        .filter(TradeTransactionItem.transaction_id == transaction.id)
+        .all()
+    )
+    lots = (
+        db.query(Lot)
+        .filter(Lot.id.in_([item.lot_id for item in items if item.lot_id is not None]))
+        .all()
+    ) if items else []
+    lot_by_id = {lot.id: lot for lot in lots}
+
+    filieres = sorted({(lot.filiere or "").upper() for lot in lots if lot.filiere})
+    filiere = filieres[0] if len(filieres) == 1 else (filieres[0] if filieres else "OR")
+    lot_refs = []
+    origin_refs = []
+    units = []
+    qty_total = 0.0
+    for item in items:
+        qty_total += float(item.quantity)
+        lot = lot_by_id.get(item.lot_id) if item.lot_id is not None else None
+        if lot:
+            lot_refs.append(lot.lot_number or f"LOT-{lot.id}")
+            if lot.origin_reference:
+                origin_refs.append(lot.origin_reference)
+            if lot.unit:
+                units.append(lot.unit)
+    origin_reference = origin_refs[0] if origin_refs else None
+    if len(set(origin_refs)) > 1:
+        origin_reference = "MIXED_ORIGIN"
+    unit = units[0] if len(set(units)) == 1 and units else ("mixed" if units else None)
+
+    seller = db.query(Actor).filter_by(id=transaction.seller_actor_id).first()
+    region_code = None
+    if seller and seller.region_id:
+        region = db.query(Region).filter_by(id=seller.region_id).first()
+        region_code = region.code if region else None
+
+    taxes = (
+        db.query(TaxRecord)
+        .filter(TaxRecord.transaction_id == transaction.id)
+        .order_by(TaxRecord.id.asc())
+        .all()
+    )
+    tax_rows = [
+        {
+            "id": row.id,
+            "tax_type": row.tax_type,
+            "beneficiary_level": row.beneficiary_level,
+            "beneficiary_key": row.beneficiary_key,
+            "rate": float(row.tax_rate),
+            "amount": float(row.tax_amount),
+            "currency": row.currency,
+            "status": row.status,
+        }
+        for row in taxes
+    ]
+    taxes_total = round(sum(x["amount"] for x in tax_rows), 2)
+    subtotal_ht = float(transaction.total_amount)
+    total_ttc = round(subtotal_ht + taxes_total, 2)
+    unit_price_avg = round(subtotal_ht / qty_total, 2) if qty_total > 0 else None
+
+    return {
+        "filiere": filiere,
+        "region_code": region_code,
+        "origin_reference": origin_reference,
+        "lot_refs": lot_refs,
+        "quantity_total": qty_total,
+        "unit": unit,
+        "unit_price_avg": unit_price_avg,
+        "subtotal_ht": subtotal_ht,
+        "tax_rows": tax_rows,
+        "taxes_total": taxes_total,
+        "total_ttc": total_ttc,
+    }
+
+
+def _compute_invoice_chain(db: Session, transaction: TradeTransaction, context: dict, now: datetime) -> dict:
+    previous = (
+        db.query(Invoice)
+        .filter(Invoice.transaction_id != transaction.id)
+        .order_by(Invoice.issue_date.desc(), Invoice.id.desc())
+        .first()
+    )
+    previous_hash = previous.invoice_hash if previous and previous.invoice_hash else "GENESIS"
+    payload = {
+        "transaction_id": transaction.id,
+        "seller_actor_id": transaction.seller_actor_id,
+        "buyer_actor_id": transaction.buyer_actor_id,
+        "filiere": context["filiere"],
+        "region_code": context["region_code"],
+        "origin_reference": context["origin_reference"],
+        "lot_refs": context["lot_refs"],
+        "subtotal_ht": context["subtotal_ht"],
+        "taxes": context["tax_rows"],
+        "total_ttc": context["total_ttc"],
+        "previous_invoice_hash": previous_hash,
+        "issued_at": now.isoformat(),
+    }
+    invoice_hash = sha256_hex(canonical_json(payload))
+    signing_secret = settings.card_qr_signing_secret or settings.jwt_secret
+    signature = sign_hmac_sha256(signing_secret, invoice_hash)
+    return {
+        "previous_hash": previous_hash,
+        "invoice_hash": invoice_hash,
+        "signature": signature,
+        "payload": payload,
+    }
+
+
+def _ensure_invoice_receipt_document(
+    db: Session,
+    *,
+    invoice: Invoice,
+    transaction: TradeTransaction,
+    payment_request: PaymentRequest,
+    now: datetime,
+) -> None:
+    if invoice.receipt_document_id and invoice.receipt_number:
+        return
+    receipt_number = build_receipt_number(invoice.id, now=now)
+    receipt_pdf = build_simple_pdf(
+        "MADAVOLA - Recu transaction",
+        [
+            f"Recu: {receipt_number}",
+            f"Facture: {invoice.invoice_number}",
+            f"Transaction: {transaction.id}",
+            f"Paiement externe: {payment_request.external_ref}",
+            f"Payeur: {payment_request.payer_actor_id}",
+            f"Beneficiaire: {payment_request.payee_actor_id}",
+            f"Montant TTC: {float(invoice.total_ttc or transaction.total_amount):.2f} {payment_request.currency}",
+            f"Hash facture: {invoice.invoice_hash or '-'}",
+            f"Date confirmation: {now.isoformat()}",
+        ],
+    )
+    receipt_filename = f"{receipt_number}.pdf"
+    receipt_path = Path(settings.document_storage_dir) / receipt_filename
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_bytes(receipt_pdf)
+    doc = Document(
+        doc_type="receipt",
+        owner_actor_id=payment_request.payer_actor_id,
+        related_entity_type="invoice",
+        related_entity_id=str(invoice.id),
+        storage_path=str(receipt_path),
+        original_filename=receipt_filename,
+        sha256=hashlib.sha256(receipt_pdf).hexdigest(),
+    )
+    db.add(doc)
+    db.flush()
+    invoice.receipt_number = receipt_number
+    invoice.receipt_document_id = doc.id
+
+
+def _finalize_transaction_success(db: Session, transaction: TradeTransaction, payment_request: PaymentRequest) -> None:
+    transaction.status = "paid"
+    now = datetime.now(timezone.utc)
+    context = _transaction_context(db, transaction)
+    chain = _compute_invoice_chain(db, transaction, context, now)
+    existing_invoice = db.query(Invoice).filter(Invoice.transaction_id == transaction.id).first()
+    invoice = existing_invoice
+    if not invoice:
+        invoice_number = build_invoice_number(
+            transaction.id,
+            filiere=context["filiere"],
+            region_code=context["region_code"],
+            now=now,
+        )
+        invoice = Invoice(
+            invoice_number=invoice_number,
+            transaction_id=transaction.id,
+            seller_actor_id=transaction.seller_actor_id,
+            buyer_actor_id=transaction.buyer_actor_id,
+            total_amount=transaction.total_amount,
+            status="paid",
+            qr_code=build_qr_value("invoice", invoice_number),
+            filiere=context["filiere"],
+            region_code=context["region_code"],
+            origin_reference=context["origin_reference"],
+            lot_references_json=json.dumps(context["lot_refs"], ensure_ascii=True),
+            quantity_total=context["quantity_total"],
+            unit=context["unit"],
+            unit_price_avg=context["unit_price_avg"],
+            subtotal_ht=context["subtotal_ht"],
+            taxes_json=json.dumps(context["tax_rows"], ensure_ascii=True),
+            taxes_total=context["taxes_total"],
+            total_ttc=context["total_ttc"],
+            previous_invoice_hash=chain["previous_hash"],
+            invoice_hash=chain["invoice_hash"],
+            internal_signature=chain["signature"],
+            trace_payload_json=canonical_json(chain["payload"]),
+            is_immutable=True,
+        )
+        db.add(invoice)
+        db.flush()
+        invoice_pdf = build_simple_pdf(
+            "MADAVOLA - Facture transaction",
+            [
+                f"Facture: {invoice_number}",
+                f"Transaction: {transaction.id}",
+                f"Vendeur: {transaction.seller_actor_id}",
+                f"Acheteur: {transaction.buyer_actor_id}",
+                f"Filiere: {context['filiere']}",
+                f"Origine: {context['origin_reference'] or '-'}",
+                f"Lots: {', '.join(context['lot_refs']) if context['lot_refs'] else '-'}",
+                f"Quantite: {context['quantity_total']:.4f} {context['unit'] or '-'}",
+                f"Total HT: {context['subtotal_ht']:.2f} {transaction.currency}",
+                f"Taxes: {context['taxes_total']:.2f} {transaction.currency}",
+                f"Total TTC: {context['total_ttc']:.2f} {transaction.currency}",
+                f"Hash facture: {chain['invoice_hash']}",
+                f"Date: {now.isoformat()}",
+            ],
+        )
+        invoice_filename = f"{invoice_number}.pdf"
+        invoice_path = Path(settings.document_storage_dir) / invoice_filename
+        invoice_path.parent.mkdir(parents=True, exist_ok=True)
+        invoice_path.write_bytes(invoice_pdf)
+        db.add(
+            Document(
+                doc_type="invoice",
+                owner_actor_id=transaction.seller_actor_id,
+                related_entity_type="invoice",
+                related_entity_id=str(invoice.id),
+                storage_path=str(invoice_path),
+                original_filename=invoice_filename,
+                sha256=hashlib.sha256(invoice_pdf).hexdigest(),
+            )
+        )
+    else:
+        invoice.status = "paid"
+        if invoice.filiere is None:
+            invoice.filiere = context["filiere"]
+        if invoice.region_code is None:
+            invoice.region_code = context["region_code"]
+        if invoice.origin_reference is None:
+            invoice.origin_reference = context["origin_reference"]
+        if not invoice.lot_references_json:
+            invoice.lot_references_json = json.dumps(context["lot_refs"], ensure_ascii=True)
+        if invoice.quantity_total is None:
+            invoice.quantity_total = context["quantity_total"]
+        if invoice.unit is None:
+            invoice.unit = context["unit"]
+        if invoice.unit_price_avg is None:
+            invoice.unit_price_avg = context["unit_price_avg"]
+        if invoice.subtotal_ht is None:
+            invoice.subtotal_ht = context["subtotal_ht"]
+        if invoice.taxes_json is None:
+            invoice.taxes_json = json.dumps(context["tax_rows"], ensure_ascii=True)
+        if invoice.taxes_total is None:
+            invoice.taxes_total = context["taxes_total"]
+        if invoice.total_ttc is None:
+            invoice.total_ttc = context["total_ttc"]
+        if invoice.previous_invoice_hash is None:
+            invoice.previous_invoice_hash = chain["previous_hash"]
+        if invoice.invoice_hash is None:
+            invoice.invoice_hash = chain["invoice_hash"]
+        if invoice.internal_signature is None:
+            invoice.internal_signature = chain["signature"]
+        if invoice.trace_payload_json is None:
+            invoice.trace_payload_json = canonical_json(chain["payload"])
+        invoice.is_immutable = True
+    _ensure_invoice_receipt_document(
+        db,
+        invoice=invoice,
+        transaction=transaction,
+        payment_request=payment_request,
+        now=now,
+    )
+    _apply_transaction_lot_transfer(db, transaction)
+    transaction.status = "transferred"
 
 
 def _apply_transaction_lot_transfer(db: Session, transaction: TradeTransaction) -> None:

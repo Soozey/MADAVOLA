@@ -25,9 +25,15 @@ export default function VerifyInvoicePage() {
           <div className="info-item"><span className="info-label">Numero</span><span className="info-value">{data.invoice_number}</span></div>
           <div className="info-item"><span className="info-label">Statut</span><span className={`info-value status-badge status-${data.status}`}>{data.status}</span></div>
           <div className="info-item"><span className="info-label">Transaction</span><span className="info-value">{data.transaction_id}</span></div>
-          <div className="info-item"><span className="info-label">Vendeur</span><span className="info-value">{data.seller_actor_id}</span></div>
-          <div className="info-item"><span className="info-label">Acheteur</span><span className="info-value">{data.buyer_actor_id}</span></div>
-          <div className="info-item"><span className="info-label">Montant</span><span className="info-value">{data.total_amount}</span></div>
+          <div className="info-item"><span className="info-label">Filiere</span><span className="info-value">{data.filiere || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Origine</span><span className="info-value">{data.origin_reference || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Montant HT</span><span className="info-value">{data.subtotal_ht ?? data.total_amount}</span></div>
+          <div className="info-item"><span className="info-label">Taxes</span><span className="info-value">{data.taxes_total ?? 0}</span></div>
+          <div className="info-item"><span className="info-label">Total TTC</span><span className="info-value">{data.total_ttc ?? data.total_amount}</span></div>
+          <div className="info-item"><span className="info-label">Hash</span><span className="info-value">{data.invoice_hash || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Hash precedent</span><span className="info-value">{data.previous_invoice_hash || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Signature</span><span className="info-value">{data.internal_signature || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Recu</span><span className="info-value">{data.receipt_number || '-'}</span></div>
         </div>
       </div>
     </div>

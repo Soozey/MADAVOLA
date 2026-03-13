@@ -29,8 +29,8 @@ export default function DashboardRegionalPage() {
   if (!canSee) {
     return (
       <div className="dashboard">
-        <h1>Vue rÃ©gionale</h1>
-        <p className="empty-state">Vous n'avez pas les habilitations pour accÃ©der au dashboard rÃ©gional.</p>
+        <h1>Vue régionale</h1>
+        <p className="empty-state">Vous n'avez pas les habilitations pour accéder au dashboard régional.</p>
       </div>
     )
   }
@@ -40,18 +40,18 @@ export default function DashboardRegionalPage() {
 
   return (
     <div className="dashboard">
-      <h1>Vue rÃ©gionale</h1>
-      <p className="dashboard-subtitle">Pilotage rÃ©gional (Gouverneur, communes, dÃ©centralisation)</p>
+      <h1>Vue régionale</h1>
+      <p className="dashboard-subtitle">Pilotage régional (Gouverneur, communes, décentralisation)</p>
 
       {regions.length > 0 && (
         <div className="form-group" style={{ maxWidth: 320, marginBottom: '1.5rem' }}>
-          <label htmlFor="region">RÃ©gion</label>
+          <label htmlFor="region">Région</label>
           <select
             id="region"
             value={effectiveRegionId ?? ''}
             onChange={(e) => setSelectedRegionId(Number(e.target.value) || null)}
           >
-            <option value="">SÃ©lectionner une rÃ©gion</option>
+            <option value="">Sélectionner une région</option>
             {regions.map((r) => (
               <option key={r.code} value={r.id ?? r.code}>
                 {r.name} ({r.code})
@@ -68,11 +68,11 @@ export default function DashboardRegionalPage() {
         <div className="dashboard-grid">
           <div className="stat-item">
             <div className="stat-value">{data.region_name}</div>
-            <div className="stat-label">RÃ©gion</div>
+            <div className="stat-label">Région</div>
           </div>
           <div className="stat-item">
             <div className="stat-value">{data.volume_created}</div>
-            <div className="stat-label">Volume crÃ©Ã©</div>
+            <div className="stat-label">Volume créé</div>
           </div>
           <div className="stat-item">
             <div className="stat-value">{data.transactions_total}</div>

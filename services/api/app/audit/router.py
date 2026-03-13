@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.audit.logger import write_audit
 from app.auth.dependencies import get_current_actor, get_actor_role_codes
 from app.auth.roles_config import has_permission, PERM_AUDIT_LOGS
 from app.common.errors import bad_request
@@ -8,7 +10,8 @@ from app.core.config import settings
 from app.db import get_db
 from app.models.actor import ActorRole
 from app.models.audit import AuditLog
-from app.audit.schemas import AuditLogOut
+from app.models.lot import InventoryLedger, Lot
+from app.audit.schemas import AuditLogOut, StockCoherenceItemOut, StockCoherenceReportOut
 
 router = APIRouter(prefix=f"{settings.api_prefix}/audit", tags=["admin"])
 
@@ -50,6 +53,78 @@ def list_audit_logs(
         )
         for log in logs
     ]
+
+
+@router.get("/stock-coherence", response_model=StockCoherenceReportOut)
+def audit_stock_coherence(
+    actor_id: int | None = None,
+    lot_id: int | None = None,
+    include_coherent: bool = False,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    if not _can_see_all_audit(db, current_actor):
+        if actor_id and actor_id != current_actor.id:
+            raise bad_request("acces_refuse")
+        actor_id = current_actor.id
+
+    query = db.query(Lot)
+    if actor_id:
+        query = query.filter(Lot.current_owner_actor_id == actor_id)
+    if lot_id:
+        query = query.filter(Lot.id == lot_id)
+
+    lots = query.all()
+    items: list[StockCoherenceItemOut] = []
+    alerts_created = 0
+    for row in lots:
+        if row.status not in {"available", "available_for_sale", "suspect"}:
+            continue
+        ledger_qty = (
+            db.query(func.sum(InventoryLedger.quantity_delta))
+            .filter(InventoryLedger.lot_id == row.id, InventoryLedger.actor_id == row.current_owner_actor_id)
+            .scalar()
+        )
+        ledger_val = float(ledger_qty or 0)
+        declared_val = float(row.quantity or 0)
+        delta = round(declared_val - ledger_val, 4)
+        is_coherent = abs(delta) < 0.0001
+        if include_coherent or not is_coherent:
+            items.append(
+                StockCoherenceItemOut(
+                    lot_id=row.id,
+                    actor_id=row.current_owner_actor_id,
+                    lot_status=row.status,
+                    declared_quantity=declared_val,
+                    ledger_quantity=ledger_val,
+                    delta=delta,
+                    is_coherent=is_coherent,
+                )
+            )
+        if not is_coherent:
+            write_audit(
+                db,
+                actor_id=current_actor.id,
+                action="stock_incoherence_alert",
+                entity_type="lot",
+                entity_id=str(row.id),
+                meta={
+                    "owner_actor_id": row.current_owner_actor_id,
+                    "declared_quantity": declared_val,
+                    "ledger_quantity": ledger_val,
+                    "delta": delta,
+                },
+            )
+            alerts_created += 1
+
+    db.commit()
+    incoherent_count = len([i for i in items if not i.is_coherent]) if include_coherent else len(items)
+    return StockCoherenceReportOut(
+        total_checked=len(lots),
+        incoherent_count=incoherent_count,
+        alerts_created=alerts_created,
+        items=items,
+    )
 
 
 def _is_admin(db: Session, actor_id: int) -> bool:

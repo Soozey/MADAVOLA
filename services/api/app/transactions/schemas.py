@@ -52,3 +52,11 @@ class TransactionPaymentOut(BaseModel):
     payment_id: int
     status: str
     external_ref: str
+
+
+class TransactionFinalizeOut(BaseModel):
+    transaction_id: int
+    status: str
+    invoice_number: str | None = None
+    invoice_id: int | None = None
+    receipt_document_id: int | None = None

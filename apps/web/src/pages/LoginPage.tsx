@@ -2,11 +2,13 @@ import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../lib/apiErrors'
+import { extractActiveRoles } from '../utils/sessionDefaults'
 import './LoginPage.css'
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
@@ -18,8 +20,15 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(identifier, password)
-      navigate('/select-role')
+      const profile = await login(identifier, password)
+      const activeRoles = extractActiveRoles(profile?.roles || [])
+      if (profile?.must_change_password) {
+        navigate('/change-password', { replace: true })
+      } else if (activeRoles.length > 1) {
+        navigate('/select-role', { replace: true })
+      } else {
+        navigate('/home', { replace: true })
+      }
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Identifiant ou mot de passe incorrect.'))
     } finally {
@@ -52,21 +61,34 @@ export default function LoginPage() {
         </div>
         <div className="form-group">
           <label htmlFor="password">Mot de passe</label>
-          <input
-            type="password"
-            id="password"
-            data-testid="login-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="********"
-          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              data-testid="login-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="********"
+              style={{ flex: 1 }}
+            />
+            <button type="button" className="btn-secondary" onClick={() => setShowPassword((v) => !v)}>
+              {showPassword ? 'Masquer' : 'Afficher'}
+            </button>
+          </div>
         </div>
         <button type="submit" className="btn-primary" data-testid="login-submit" disabled={loading} style={{ width: '100%' }}>
           {loading ? 'Connexion...' : 'Se connecter'}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => navigate('/signup')}
+          style={{ width: '100%', marginTop: 10 }}
+        >
+          S'inscrire
         </button>
       </form>
     </div>
   )
 }
-

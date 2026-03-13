@@ -5,6 +5,8 @@ import { ToastProvider } from './contexts/ToastContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { SessionGuard } from './components/SessionGuard'
 import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
+import ChangePasswordPage from './pages/ChangePasswordPage'
 import RoleSelectPage from './pages/RoleSelectPage'
 import FiliereSelectPage from './pages/FiliereSelectPage'
 import HomePage from './pages/HomePage'
@@ -18,7 +20,6 @@ import TransactionsPage from './pages/TransactionsPage'
 import TransactionDetailPage from './pages/TransactionDetailPage'
 import LotDetailPage from './pages/LotDetailPage'
 import ActorDetailPage from './pages/ActorDetailPage'
-import MaCartePage from './pages/MaCartePage'
 import VerifyActorPage from './pages/VerifyActorPage'
 import VerifyLotPage from './pages/VerifyLotPage'
 import VerifyInvoicePage from './pages/VerifyInvoicePage'
@@ -43,6 +44,9 @@ import GeoPointDetailPage from './pages/GeoPointDetailPage'
 import FeeDetailPage from './pages/FeeDetailPage'
 import GeoMapPage from './pages/GeoMapPage'
 import AccountOpsPage from './pages/AccountOpsPage'
+import ProfilePage from './pages/ProfilePage'
+import MessagesPage from './pages/MessagesPage'
+import MarketplacePage from './pages/MarketplacePage'
 import Layout from './components/Layout'
 
 function App() {
@@ -53,11 +57,20 @@ function App() {
           <ToastProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
+              <Route
+                path="/change-password"
+                element={
+                  <ProtectedRoute>
+                    <ChangePasswordPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/verify/actor/:id" element={<VerifyActorPage />} />
               <Route path="/verify/lot/:id" element={<VerifyLotPage />} />
               <Route path="/verify/invoice/:ref" element={<VerifyInvoicePage />} />
 
-              <Route path="/welcome" element={<Navigate to="/select-role" replace />} />
+              <Route path="/welcome" element={<Navigate to="/home" replace />} />
               <Route
                 path="/select-role"
                 element={
@@ -97,8 +110,11 @@ function App() {
                 <Route path="dashboard/commune" element={<DashboardCommunePage />} />
                 <Route path="actors" element={<ActorsPage />} />
                 <Route path="account-ops" element={<AccountOpsPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+                <Route path="messages" element={<MessagesPage />} />
+                <Route path="marketplace" element={<MarketplacePage />} />
                 <Route path="actors/:id" element={<ActorDetailPage />} />
-                <Route path="ma-carte" element={<MaCartePage />} />
+                <Route path="ma-carte" element={<Navigate to="/or-compliance" replace />} />
                 <Route path="lots" element={<LotsPage />} />
                 <Route path="lots/:id" element={<LotDetailPage />} />
                 <Route path="transactions" element={<TransactionsPage />} />

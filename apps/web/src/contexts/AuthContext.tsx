@@ -7,17 +7,27 @@ interface User {
   prenoms: string | null
   email: string
   telephone: string
+  cin?: string | null
+  cin_date_delivrance?: string | null
+  date_naissance?: string | null
+  adresse_text?: string | null
+  photo_profile_url?: string | null
   roles: Array<{ role: string; status: string }>
-  region: { code: string; name: string } | null
-  commune: { code: string; name: string } | null
+  filieres?: string[]
+  primary_role?: string | null
+  must_change_password?: boolean
+  region: { id?: number; code: string; name: string } | null
+  district?: { id?: number; code: string; name: string } | null
+  commune: { id?: number; code: string; name: string } | null
+  fokontany?: { id?: number; code: string; name: string } | null
 }
 
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (identifier: string, password: string) => Promise<void>
-  logout: () => void
-  refreshUser: () => Promise<void>
+  login: (identifier: string, password: string) => Promise<User | null>
+  logout: () => Promise<void>
+  refreshUser: () => Promise<User | null>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -39,12 +49,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tokens = await api.login(identifier, password)
     localStorage.setItem('access_token', tokens.access_token)
     localStorage.setItem('refresh_token', tokens.refresh_token)
-    await refreshUser()
+    return refreshUser()
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const refreshToken = localStorage.getItem('refresh_token')
+    if (refreshToken) {
+      try {
+        await api.logout(refreshToken)
+      } catch {
+        // best effort logout
+      }
+    }
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    localStorage.removeItem('selectedRole')
+    localStorage.removeItem('selectedFiliere')
     setUser(null)
   }
 
@@ -52,9 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const userData = await api.getMe()
       setUser(userData)
+      return userData
     } catch (error) {
       console.error('Failed to fetch user:', error)
-      logout()
+      await logout()
+      return null
     }
   }
 

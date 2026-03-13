@@ -111,7 +111,7 @@ export default function TransactionDetailPage() {
               <span className="info-label">Facture</span>
               <span className="info-value">
                 <Link to={`/invoices?transaction=${transactionId}`} title="Voir la facture">
-                  Facture #{invoice.invoice_number ?? invoice.id}
+                  Facture #{invoice.invoice_number || invoice.id}
                 </Link>
               </span>
             </div>

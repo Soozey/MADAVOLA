@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
 from app.auth.security import hash_password
-from app.models.actor import Actor, ActorAuth
+from app.models.actor import Actor, ActorAuth, ActorRole
 from app.models.audit import AuditLog
+from app.models.geo import GeoPoint
+from app.models.lot import InventoryLedger, Lot
 from app.models.territory import Commune, District, Region, TerritoryVersion
 from app.territories.importer import import_territory_excel
 from io import BytesIO
@@ -111,3 +113,59 @@ def test_list_audit_logs(client, db_session):
     )
     assert response.status_code == 200
     assert len(response.json()) >= 1
+
+
+def test_stock_coherence_endpoint_creates_alert(client, db_session):
+    import_territory_excel(db_session, _build_excel(), "territory.xlsx", "v1")
+    actor = Actor(
+        type_personne="physique",
+        nom="AdminAudit",
+        prenoms="Test",
+        telephone="0340000601",
+        email="audit-admin@example.com",
+        status="active",
+        region_id=1,
+        district_id=1,
+        commune_id=1,
+        territory_version_id=1,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(actor)
+    db_session.flush()
+    db_session.add(ActorAuth(actor_id=actor.id, password_hash=hash_password("secret"), is_active=1))
+    db_session.add(ActorRole(actor_id=actor.id, role="admin", status="active"))
+
+    geo = GeoPoint(lat=-18.91, lon=47.52, accuracy_m=12)
+    db_session.add(geo)
+    db_session.flush()
+    lot = Lot(
+        filiere="OR",
+        product_type="or_brut",
+        unit="g",
+        quantity=10,
+        declared_by_actor_id=actor.id,
+        current_owner_actor_id=actor.id,
+        status="available",
+        declare_geo_point_id=geo.id,
+    )
+    db_session.add(lot)
+    db_session.flush()
+    db_session.add(
+        InventoryLedger(
+            actor_id=actor.id,
+            lot_id=lot.id,
+            movement_type="create",
+            quantity_delta=8,
+            ref_event_type="lot",
+            ref_event_id=str(lot.id),
+        )
+    )
+    db_session.commit()
+
+    login = client.post("/api/v1/auth/login", json={"identifier": actor.email, "password": "secret"})
+    token = login.json()["access_token"]
+    response = client.get("/api/v1/audit/stock-coherence", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["incoherent_count"] >= 1
+    assert payload["alerts_created"] >= 1

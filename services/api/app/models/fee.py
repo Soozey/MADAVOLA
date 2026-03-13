@@ -18,5 +18,7 @@ class Fee(Base):
     status = Column(String(20), nullable=False, default="pending")
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     paid_at = Column(DateTime(timezone=True))
+    receipt_number = Column(String(80))
+    receipt_document_id = Column(Integer, ForeignKey("documents.id"))
 
     payment_requests = relationship("PaymentRequest", back_populates="fee")

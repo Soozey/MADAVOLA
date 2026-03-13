@@ -10,10 +10,20 @@ def build_qr_value(kind: str, identifier: str) -> str:
     return f"MADAVOLA:{kind}:{identifier}"
 
 
-def build_simple_pdf(title: str, lines: list[str]) -> bytes:
-    # Minimal single-page PDF (Helvetica) to store a printable receipt.
+def build_simple_pdf(
+    title: str,
+    lines: list[str],
+    *,
+    page_width_pt: int = 595,
+    page_height_pt: int = 842,
+    start_x: int = 50,
+    start_y: int = 780,
+    line_height: int = 18,
+    font_size: int = 12,
+) -> bytes:
+    # Minimal single-page PDF (Helvetica) to store a printable receipt/card.
     text = [title] + lines
-    text_ops = ["BT", "/F1 12 Tf", "50 780 Td"]
+    text_ops = ["BT", f"/F1 {font_size} Tf", f"{start_x} {start_y} Td"]
     for idx, line in enumerate(text):
         safe = (
             str(line)
@@ -22,7 +32,7 @@ def build_simple_pdf(title: str, lines: list[str]) -> bytes:
             .replace(")", "\\)")
         )
         if idx > 0:
-            text_ops.append("0 -18 Td")
+            text_ops.append(f"0 -{line_height} Td")
         text_ops.append(f"({safe}) Tj")
     text_ops.append("ET")
     stream_data = "\n".join(text_ops).encode("utf-8")
@@ -31,7 +41,7 @@ def build_simple_pdf(title: str, lines: list[str]) -> bytes:
     objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
     objects.append(b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n")
     objects.append(
-        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n"
+        f"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width_pt} {page_height_pt}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n".encode("utf-8")
     )
     objects.append(
         b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n"

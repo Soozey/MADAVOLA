@@ -49,7 +49,7 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       setShowForm(false)
       setItems([{ lot_id: 0, quantity: 0, unit_price: 0 }])
-      toast.success('Transaction créée. Vous pouvez initier le paiement depuis le détail de la transaction.')
+      toast.success('Transaction creee. Vous pouvez initier le paiement depuis le detail de la transaction.')
     },
   })
 
@@ -69,7 +69,7 @@ export default function TransactionsPage() {
     const currency = formData.get('currency') as string
     const validItems = items.filter((row) => row.lot_id > 0 && row.quantity > 0 && row.unit_price >= 0)
     if (validItems.length === 0) {
-      setValidationError('Ajoutez au moins une ligne avec un lot, une quantité et un prix unitaire.')
+      setValidationError('Ajoutez au moins une ligne avec un lot, une quantite et un prix unitaire.')
       return
     }
     setValidationError('')
@@ -88,7 +88,7 @@ export default function TransactionsPage() {
   const errorDetail = createMutation.isError ? getApiDetailFromError(createMutation.error) : null
   const errorMessage =
     validationError ||
-    (createMutation.isError ? getApiErrorMessage(errorDetail, 'Erreur lors de la création de la transaction.') : '')
+    (createMutation.isError ? getApiErrorMessage(errorDetail, 'Erreur lors de la creation de la transaction.') : '')
 
   if (isLoading) return <div className="loading">Chargement...</div>
 
@@ -96,24 +96,43 @@ export default function TransactionsPage() {
     <div className="transactions-page">
       <div className="page-header">
         <h1>Transactions</h1>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Annuler' : '+ Nouvelle transaction'}
-        </button>
+      </div>
+
+      <div className="card tasks-of-day">
+        <h2>Taches du jour</h2>
+        <p className="process-label">
+          Creez une transaction en priorite, puis suivez son paiement et sa facture associee.
+        </p>
+        <div className="tasks-actions">
+          <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Annuler la creation' : 'Creer une transaction'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => document.getElementById('transactions-list')?.scrollIntoView({ behavior: 'smooth' })}
+          >
+            Voir les transactions
+          </button>
+          <Link className="btn-secondary" to="/invoices">
+            Ouvrir les factures
+          </Link>
+        </div>
       </div>
 
       {showForm && (
         <div className="card form-card">
-          <h2>Créer une transaction</h2>
-          <p className="process-label">Étape 3 du processus : enregistrer une vente entre un vendeur et un acheteur (lots, quantités, prix). Le paiement peut être initié ensuite.</p>
+          <h2>Creer une transaction</h2>
+          <p className="process-label">Etape 3 du processus : enregistrer une vente entre un vendeur et un acheteur (lots, quantites, prix). Le paiement peut etre initie ensuite.</p>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
                 <label htmlFor="seller_actor_id">Vendeur *</label>
                 <select id="seller_actor_id" name="seller_actor_id" required>
-                  <option value="">— Choisir —</option>
+                  <option value="">-- Choisir --</option>
                   {actors.map((a: any) => (
                     <option key={a.id} value={a.id}>
-                      {a.nom} {a.prenoms} ({a.email ?? a.telephone})
+                      {a.nom} {a.prenoms} ({a.email || a.telephone})
                     </option>
                   ))}
                 </select>
@@ -121,10 +140,10 @@ export default function TransactionsPage() {
               <div className="form-group">
                 <label htmlFor="buyer_actor_id">Acheteur *</label>
                 <select id="buyer_actor_id" name="buyer_actor_id" required>
-                  <option value="">— Choisir —</option>
+                  <option value="">-- Choisir --</option>
                   {actors.map((a: any) => (
                     <option key={a.id} value={a.id}>
-                      {a.nom} {a.prenoms} ({a.email ?? a.telephone})
+                      {a.nom} {a.prenoms} ({a.email || a.telephone})
                     </option>
                   ))}
                 </select>
@@ -132,7 +151,7 @@ export default function TransactionsPage() {
               <div className="form-group">
                 <label htmlFor="currency">Devise *</label>
                 <select id="currency" name="currency" required>
-                  <option value="">Sélectionner...</option>
+                  <option value="">Selectionner...</option>
                   <option value="MGA">MGA</option>
                   <option value="EUR">EUR</option>
                   <option value="USD">USD</option>
@@ -142,7 +161,7 @@ export default function TransactionsPage() {
 
             <div className="form-section">
               <div className="form-section-header">
-                <label>Lignes de la transaction (lot, quantité, prix unitaire)</label>
+                <label>Lignes de la transaction (lot, quantite, prix unitaire)</label>
                 <button type="button" className="btn-secondary" onClick={addLine}>
                   + Ligne
                 </button>
@@ -154,10 +173,10 @@ export default function TransactionsPage() {
                     onChange={(e) => updateLine(index, 'lot_id', Number(e.target.value))}
                     required
                   >
-                    <option value="">— Lot —</option>
+                    <option value="">-- Lot --</option>
                     {lots.map((lot: any) => (
                       <option key={lot.id} value={lot.id}>
-                        Lot #{lot.id} – {lot.product_type} ({lot.quantity} {lot.unit})
+                        Lot #{lot.id} - {lot.product_type} ({lot.quantity} {lot.unit})
                       </option>
                     ))}
                   </select>
@@ -165,7 +184,7 @@ export default function TransactionsPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="Quantité"
+                    placeholder="Quantite"
                     value={row.quantity || ''}
                     onChange={(e) => updateLine(index, 'quantity', parseFloat(e.target.value) || 0)}
                   />
@@ -178,7 +197,7 @@ export default function TransactionsPage() {
                     onChange={(e) => updateLine(index, 'unit_price', parseFloat(e.target.value) || 0)}
                   />
                   <button type="button" className="btn-secondary" onClick={() => removeLine(index)} disabled={items.length <= 1}>
-                    −
+                    -
                   </button>
                 </div>
               ))}
@@ -187,14 +206,14 @@ export default function TransactionsPage() {
             {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
             <div className="form-actions">
               <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Création...' : 'Créer'}
+                {createMutation.isPending ? 'Creation...' : 'Creer'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="card">
+      <div id="transactions-list" className="card">
         <div className="table-container">
           <table>
             <thead>
@@ -226,9 +245,9 @@ export default function TransactionsPage() {
                   <td colSpan={5}>
                     <div className="empty-state-rich">
                       <div className="empty-title">Aucune transaction</div>
-                      <p className="empty-desc">Les transactions enregistrent les ventes entre un vendeur et un acheteur (lots, quantités, prix). Créez une transaction pour enregistrer une vente ; le paiement peut être initié ensuite.</p>
+                      <p className="empty-desc">Les transactions enregistrent les ventes entre un vendeur et un acheteur (lots, quantites, prix). Creez une transaction pour enregistrer une vente ; le paiement peut etre initie ensuite.</p>
                       <button type="button" className="btn-primary" onClick={() => setShowForm(true)}>
-                        + Créer une transaction
+                        + Creer une transaction
                       </button>
                     </div>
                   </td>
@@ -248,7 +267,7 @@ export default function TransactionsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                Précédent
+                Precedent
               </button>
               <button
                 className="btn-secondary"

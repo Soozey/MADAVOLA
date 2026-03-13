@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base
@@ -17,12 +17,17 @@ class Actor(Base):
     type_personne = Column(String(20), nullable=False)
     nom = Column(String(150), nullable=False)
     prenoms = Column(String(150))
+    surnom = Column(String(120))
+    date_naissance = Column(Date)
     cin = Column(String(50))
+    cin_date_delivrance = Column(Date)
     nif = Column(String(50))
     stat = Column(String(50))
     rccm = Column(String(50))
     telephone = Column(String(30), unique=True)
     email = Column(String(255), unique=True)
+    adresse_text = Column(Text)
+    photo_profile_url = Column(String(255))
     region_id = Column(Integer, ForeignKey("regions.id"), nullable=False)
     district_id = Column(Integer, ForeignKey("districts.id"), nullable=False)
     commune_id = Column(Integer, ForeignKey("communes.id"), nullable=False)
@@ -63,6 +68,9 @@ class ActorAuth(Base):
     actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Integer, nullable=False, default=1)
+    must_change_password = Column(Integer, nullable=False, default=0)
+    password_changed_at = Column(DateTime(timezone=True))
+    last_login_at = Column(DateTime(timezone=True))
 
     actor = relationship("Actor", back_populates="auth")
 

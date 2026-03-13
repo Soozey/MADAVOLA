@@ -39,6 +39,8 @@ export default function Layout() {
     { match: (p) => p.includes('transform') || p.includes('lapidaire') || p.includes('raffinerie'), paths: ['/transformations'] },
     { match: (p) => p.includes('controle') || p.includes('inspection') || p.includes('profil_controleur'), paths: ['/inspections', '/violations', '/verify'] },
     { match: (p) => p.includes('audit'), paths: ['/audit'] },
+    { match: (p) => p.includes('message') || p.includes('contact'), paths: ['/messages'] },
+    { match: (p) => p.includes('market') || p.includes('offre'), paths: ['/marketplace'] },
     { match: (p) => p.includes('dashboard') || p.includes('lecture_seule') || p.includes('report'), paths: ['/dashboard', '/reports'] },
   ]
   for (const permission of selectedRolePermissions) {
@@ -56,7 +58,7 @@ export default function Layout() {
   const roleForUx = selectedMenuRole || effectiveRoles[0] || ''
   const dailyPaths = useMemo(() => {
     const map: Record<string, string[]> = {
-      orpailleur: ['/lots', '/transactions', '/ma-carte', '/notifications'],
+      orpailleur: ['/lots', '/transactions', '/or-compliance', '/notifications'],
       collecteur: ['/lots', '/trades', '/transactions', '/notifications'],
       commune: ['/actors', '/dashboard/commune', '/notifications'],
       commune_agent: ['/actors', '/dashboard/commune', '/notifications'],
@@ -85,6 +87,8 @@ export default function Layout() {
       path === '/' ||
       path === '/home' ||
       path === '/dashboard' ||
+      path === '/profile' ||
+      path === '/ma-carte' ||
       allowedPaths.some((p) => path === p || path.startsWith(p + '/'))
     if (!isAllowed && menuItems.length > 0) {
       navigate('/home', { replace: true })
@@ -99,6 +103,10 @@ export default function Layout() {
   const handleChangeProfile = () => {
     changeProfile()
     navigate('/select-role')
+  }
+
+  const handleOpenProfile = () => {
+    navigate('/profile')
   }
 
   const handleChangeFiliere = () => {
@@ -168,8 +176,11 @@ export default function Layout() {
               {selectedFiliere ?? 'Filiere non definie'}
             </div>
           </div>
+          <button onClick={handleOpenProfile} className="btn-secondary session-action-btn">
+            Mon profil
+          </button>
           <button onClick={handleChangeProfile} className="btn-secondary session-action-btn">
-            Modifier profil
+            Changer role
           </button>
           <button onClick={handleChangeFiliere} className="btn-secondary session-action-btn">
             Changer filiere

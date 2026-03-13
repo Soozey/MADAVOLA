@@ -21,7 +21,7 @@ export default function DashboardNationalPage() {
     return (
       <div className="dashboard">
         <h1>Vue nationale</h1>
-        <p className="empty-state">Vous n'avez pas les habilitations pour accÃ©der au dashboard national.</p>
+        <p className="empty-state">Vous n'avez pas les habilitations pour accéder au dashboard national.</p>
       </div>
     )
   }
@@ -39,7 +39,7 @@ export default function DashboardNationalPage() {
     <div className="dashboard">
       <h1>Vue nationale</h1>
       <p className="dashboard-subtitle">
-        Indicateurs agrÃ©gÃ©s (volumes, recettes, anomalies, export, zones Ã  risque) â€” Lecture seule, accÃ¨s aux alertes stratÃ©giques.
+        Indicateurs agrégés (volumes, recettes, anomalies, export, zones à risque) — Lecture seule, accès aux alertes stratégiques.
       </p>
       {isLoading ? (
         <div className="loading">Chargement...</div>
@@ -48,7 +48,7 @@ export default function DashboardNationalPage() {
           <div className="dashboard-grid">
             <div className="stat-item">
               <div className="stat-value">{data.volume_created}</div>
-              <div className="stat-label">Volume crÃ©Ã© (pÃ©riode)</div>
+              <div className="stat-label">Volume créé (période)</div>
             </div>
             <div className="stat-item">
               <div className="stat-value">{data.transactions_total}</div>
@@ -72,7 +72,7 @@ export default function DashboardNationalPage() {
 
           {data.alertes_strategiques?.length > 0 && (
             <div className="card">
-              <h2>Alertes stratÃ©giques</h2>
+              <h2>Alertes stratégiques</h2>
               <ul className="list">
                 {data.alertes_strategiques.map((a: { id: string; libelle: string; severite: string }) => (
                   <li key={a.id} className="list-item">

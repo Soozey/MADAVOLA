@@ -22,6 +22,13 @@ REQUIRED_COLUMNS = {
     "fokontany_name",
 }
 
+NAME_ONLY_COLUMNS = {
+    "region_name",
+    "district_name",
+    "commune_name",
+    "fokontany_name",
+}
+
 OPTIONAL_COLUMNS = {
     "fokontany_code",
     "commune_mobile_money_msisdn",
@@ -32,12 +39,16 @@ OPTIONAL_COLUMNS = {
 ALIASES = {
     "region code": "region_code",
     "region name": "region_name",
+    "region": "region_name",
     "district code": "district_code",
     "district name": "district_name",
+    "district": "district_name",
     "commune code": "commune_code",
     "commune name": "commune_name",
+    "commune": "commune_name",
     "fokontany code": "fokontany_code",
     "fokontany name": "fokontany_name",
+    "fokontany": "fokontany_name",
     "commune_mobile_money_msisdn": "commune_mobile_money_msisdn",
     "commune mobile money msisdn": "commune_mobile_money_msisdn",
     "latitude": "latitude",
@@ -65,10 +76,6 @@ def import_territory_excel(
     sheet = workbook.active
 
     headers = _normalize_headers(next(sheet.iter_rows(min_row=1, max_row=1, values_only=True)))
-    missing = REQUIRED_COLUMNS - set(headers.values())
-    if missing:
-        raise bad_request("colonnes_requises_manquantes", {"missing": sorted(missing)})
-
     rows = sheet.iter_rows(min_row=2, values_only=True)
     parsed = list(_parse_rows(rows, headers))
     if not parsed:
@@ -125,6 +132,21 @@ def _normalize_headers(headers: Iterable[str | None]) -> dict[int, str]:
 
 
 def _parse_rows(rows: Iterable[tuple], headers: dict[int, str]) -> Iterable[dict[str, str]]:
+    available = set(headers.values())
+    has_full_schema = REQUIRED_COLUMNS.issubset(available)
+    has_name_only_schema = NAME_ONLY_COLUMNS.issubset(available)
+
+    if not has_full_schema and not has_name_only_schema:
+        missing = sorted(REQUIRED_COLUMNS - available)
+        raise bad_request("colonnes_requises_manquantes", {"missing": missing})
+
+    generated_codes: dict[str, dict[str, str]] = {
+        "regions": {},
+        "districts": {},
+        "communes": {},
+    }
+    last_known: dict[str, str] = {}
+
     for row_index, row in enumerate(rows, start=2):
         data = {}
         for idx, key in headers.items():
@@ -132,10 +154,52 @@ def _parse_rows(rows: Iterable[tuple], headers: dict[int, str]) -> Iterable[dict
             if value is None:
                 continue
             data[key] = _clean_text(value)
-        missing = REQUIRED_COLUMNS - set(data.keys())
-        if missing:
-            raise bad_request("valeur_manquante", {"row": row_index, "missing": sorted(missing)})
-        yield data
+
+        if has_full_schema:
+            missing = REQUIRED_COLUMNS - set(data.keys())
+            if missing:
+                raise bad_request("valeur_manquante", {"row": row_index, "missing": sorted(missing)})
+            yield data
+            continue
+
+        for key in ("region_name", "district_name", "commune_name"):
+            if key not in data and key in last_known:
+                data[key] = last_known[key]
+            elif key in data:
+                last_known[key] = data[key]
+
+        missing_names = NAME_ONLY_COLUMNS - set(data.keys())
+        if missing_names:
+            raise bad_request("valeur_manquante", {"row": row_index, "missing": sorted(missing_names)})
+        yield _with_generated_codes(data, generated_codes)
+
+
+def _with_generated_codes(
+    row: dict[str, str], generated_codes: dict[str, dict[str, str]]
+) -> dict[str, str]:
+    region_norm = _normalize_key(row["region_name"])
+    district_norm = _normalize_key(row["district_name"])
+    commune_norm = _normalize_key(row["commune_name"])
+
+    if region_norm not in generated_codes["regions"]:
+        generated_codes["regions"][region_norm] = f"R{len(generated_codes['regions']) + 1:03d}"
+    region_code = generated_codes["regions"][region_norm]
+
+    district_key = f"{region_norm}|{district_norm}"
+    if district_key not in generated_codes["districts"]:
+        generated_codes["districts"][district_key] = f"{region_code}-D{len(generated_codes['districts']) + 1:04d}"
+    district_code = generated_codes["districts"][district_key]
+
+    commune_key = f"{district_key}|{commune_norm}"
+    if commune_key not in generated_codes["communes"]:
+        generated_codes["communes"][commune_key] = f"{district_code}-C{len(generated_codes['communes']) + 1:04d}"
+    commune_code = generated_codes["communes"][commune_key]
+
+    enriched = dict(row)
+    enriched["region_code"] = region_code
+    enriched["district_code"] = district_code
+    enriched["commune_code"] = commune_code
+    return enriched
 
 
 def _clean_text(value: object) -> str:

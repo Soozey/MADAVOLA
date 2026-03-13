@@ -39,5 +39,16 @@ jobs:
       - name: Install API dependencies
         run: pip install -r services/api/requirements.txt
 
+      - name: API-UI contract audit (forward + reverse)
+        run: npm run check:api-ui
+
       - name: Run API tests
         run: npm run test:api
+
+      - name: Upload API-UI contract report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-ui-contract-report
+          path: docs/api-ui-contract-report.md
+          if-no-files-found: warn

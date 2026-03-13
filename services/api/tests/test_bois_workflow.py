@@ -319,6 +319,19 @@ def test_essence_a_export_blocked_without_exception(client, db_session):
         )
     )
     db_session.commit()
+    admin_token = _login(client, admin.email)
+    classify = client.patch(
+        f"/api/v1/lots/{lot['id']}/wood-classification",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "wood_classification": "LEGAL_EXPORTABLE",
+            "cites_laf_status": "approved",
+            "cites_ndf_status": "approved",
+            "cites_international_status": "approved",
+            "notes": "Validation CITES completee",
+        },
+    )
+    assert classify.status_code == 200
 
     allowed = client.post(
         f"/api/v1/exports/{dossier['id']}/lots",

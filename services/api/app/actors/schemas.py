@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 
@@ -6,6 +8,10 @@ class ActorCreate(BaseModel):
     nom: str
     prenoms: str | None = None
     cin: str | None = None
+    cin_date_delivrance: date | None = None
+    date_naissance: date | None = None
+    surnom: str | None = None
+    adresse_text: str | None = None
     nif: str | None = None
     stat: str | None = None
     rccm: str | None = None
@@ -30,9 +36,15 @@ class ActorOut(BaseModel):
     type_personne: str
     nom: str
     prenoms: str | None = None
+    surnom: str | None = None
     telephone: str
     email: str | None = None
     status: str
+    cin: str | None = None
+    cin_date_delivrance: date | None = None
+    date_naissance: date | None = None
+    adresse_text: str | None = None
+    photo_profile_url: str | None = None
     region_code: str
     district_code: str
     commune_code: str

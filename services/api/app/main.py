@@ -20,8 +20,11 @@ from app.geopoints.router import router as geopoints_router
 from app.health.router import router as health_router
 from app.invoices.router import router as invoices_router
 from app.inspections.router import router as inspections_router
+from app.karabola.router import router as karabola_router
 from app.ledger.router import router as ledger_router
 from app.lots.router import router as lots_router
+from app.marketplace.router import router as marketplace_router
+from app.messages.router import router as messages_router
 from app.payments.router import router as payments_router
 from app.payments.providers_router import router as payment_providers_router
 from app.notifications.router import router as notifications_router
@@ -75,6 +78,8 @@ from app.models.bois import (
 )
 from app.models.rbac import RoleCatalog
 from app.models.emergency import EmergencyAlert
+from app.models.communication import ContactRequest, DirectMessage
+from app.models.marketplace import MarketplaceOffer
 from app.models.base import Base
 from app.auth.roles_config import ROLE_DEFINITIONS
 
@@ -103,8 +108,11 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(invoices_router)
     app.include_router(inspections_router)
+    app.include_router(karabola_router)
     app.include_router(ledger_router)
     app.include_router(lots_router)
+    app.include_router(marketplace_router)
+    app.include_router(messages_router)
     app.include_router(payments_router)
     app.include_router(payment_providers_router)
     app.include_router(notifications_router)
@@ -173,6 +181,9 @@ def create_app() -> FastAPI:
         TransportRecordItem.__table__.create(bind=engine, checkfirst=True)
         WorkflowApproval.__table__.create(bind=engine, checkfirst=True)
         EmergencyAlert.__table__.create(bind=engine, checkfirst=True)
+        ContactRequest.__table__.create(bind=engine, checkfirst=True)
+        DirectMessage.__table__.create(bind=engine, checkfirst=True)
+        MarketplaceOffer.__table__.create(bind=engine, checkfirst=True)
         with engine.begin() as conn:
             existing_roles = conn.execute(text("SELECT COUNT(*) FROM rbac_role_catalog")).scalar() or 0
             if existing_roles == 0:
@@ -216,6 +227,38 @@ def create_app() -> FastAPI:
                 conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS wood_essence_id INTEGER"))
                 conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS wood_form VARCHAR(40)"))
                 conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS volume_m3 NUMERIC(14,4)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS lot_number VARCHAR(120)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS traceability_id VARCHAR(120)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS origin_reference VARCHAR(160)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS previous_block_hash VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS current_block_hash VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS trace_payload_json TEXT"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS wood_classification VARCHAR(30)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS cites_laf_status VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS cites_ndf_status VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS cites_international_status VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS destruction_status VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS destruction_requested_at TIMESTAMPTZ"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS destruction_validated_at TIMESTAMPTZ"))
+                conn.execute(text("ALTER TABLE lots ADD COLUMN IF NOT EXISTS destruction_evidence_json TEXT"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS filiere VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS region_code VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS origin_reference VARCHAR(160)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS lot_references_json TEXT"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS quantity_total NUMERIC(14,4)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS unit VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS unit_price_avg NUMERIC(14,2)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS subtotal_ht NUMERIC(14,2)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS taxes_json TEXT"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS taxes_total NUMERIC(14,2)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS total_ttc NUMERIC(14,2)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS invoice_hash VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS previous_invoice_hash VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS internal_signature VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS trace_payload_json TEXT"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(80)"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS receipt_document_id INTEGER"))
+                conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_immutable BOOLEAN DEFAULT TRUE"))
 
     return app
 

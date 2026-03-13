@@ -6,8 +6,11 @@
     "build:mobile": "npm run build --workspace @madavola/mobile",
     "build:web-admin": "npm run build --workspace madavola-web-admin",
     "test:api": "cd services/api && python -c \"import sys,pytest; sys.path.insert(0,'.'); raise SystemExit(pytest.main(['-q']))\"",
+    "check:api-contract": "python scripts/api_ui_contract_audit.py --mode forward",
+    "check:ui-coverage": "python scripts/api_ui_contract_audit.py --mode reverse",
+    "check:api-ui": "python scripts/api_ui_contract_audit.py --mode both",
     "check:web-bundle": "node scripts/check-web-bundle.mjs",
-    "ci": "npm run build:web && npm run build:web-admin && npm run check:web-bundle && npm run test:api"
+    "ci": "npm run check:api-contract && npm run check:ui-coverage && npm run build:web && npm run build:web-admin && npm run check:web-bundle && npm run test:api"
   },
   "packageManager": "pnpm@latest",
   "workspaces": [

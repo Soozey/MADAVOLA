@@ -1,0 +1,70 @@
+role_code,display_name,actor_type,category,institution,level,description,permissions,permissions_count
+acteur,Acteur,USAGER,Acteurs terrain,Acteur de la filière,communautaire,"Opérateur terrain (déclarations, transactions).",,0
+admin,Admin,OPERATEUR_PRIVE,Administration,Administrateur plateforme,central,"Accès complet à la plateforme (configuration, rôles, territoires, etc.).",admin_commune;admin_filiere_bois;admin_filiere_mines;admin_filiere_or;audit_logs;dashboard_national;dashboard_regional;lecture_seule;pilotage_kpi;supervision_recettes;supervision_territoriale,11
+analyse_certification,Analyse Certification,TRANSVERSAL,Administration,Entite d'analyse et certification,central,"Titrage, poinconnage officiel et certification qualite/quantite des lots.",analyse_certification;controle_export,2
+artec,Artec,TRANSVERSAL,Administration,Autorité de Régulation des Technologies de Communication,regulation,Cadre passerelles USSD / codes courts (si USSD).,,0
+banque_centrale,Banque Centrale,TRANSVERSAL,Administration,Banque centrale,central,Validation du rapatriement de devises sur export.,rapatriement_devises,1
+banque_commerciale,Banque Commerciale,TRANSVERSAL,Administration,Banque commerciale,central,Transmission des preuves bancaires de rapatriement.,rapatriement_devises,1
+bcmm,Bcmm,TRANSVERSAL,Administration,Bureau du Cadastre Minier de Madagascar,central,Cadastre/titres miniers : référentiel des permis et zones.,fournisseur_donnees;lecture_seule,2
+bfm,Bfm,TRANSVERSAL,Administration,Banque Centrale de Madagascar (Banky Foiben'i Madagasikara),central,Suivi rapatriement des devises; conformité changes; réserves.,lecture_seule;rapatriement_devises,2
+bianco,Bianco,TRANSVERSAL,Administration,BIANCO (Anti-corruption),controle,Lutte anticorruption; exploitation des traces/audits en cas d'enquête.,audit_logs,1
+bijoutier,Bijoutier,USAGER,Acteurs terrain,Bijouterie,central,"Operateur bijoutier: registre entrees/sorties, gestion laissez-passer et ventes locales.",card_collector_manage;registre_bijoutier,2
+bois_admin_central,Bois Admin Central,TRANSVERSAL,BOIS,Admin central BOIS,central,Parametrage essences/regles/checklists et supervision nationale.,audit_logs;bois_catalog_admin;bois_control;bois_export,4
+bois_artisan,Bois Artisan,USAGER,BOIS,Artisan bois,communautaire,Fabrication produits finis et ventes autorisees.,bois_trade;bois_transform,2
+bois_collecteur,Bois Collecteur,USAGER,BOIS,Collecteur bois,communautaire,"Achat local, regroupement et vente de lots bois.",bois_declare_lot;bois_trade,2
+bois_commune_agent,Bois Commune Agent,AGENT_ETAT,BOIS,Commune BOIS,territorial,Enrolement local et suivi frais communaux BOIS.,admin_commune;bois_declare_lot,2
+bois_controleur,Bois Controleur,AGENT_ETAT,BOIS,Controleur BOIS,controle,"Controle routier, PV et sanctions metier BOIS.",bois_control;profil_controleur,2
+bois_douanes,Bois Douanes,AGENT_ETAT,BOIS,Douanes BOIS,controle,"Controle export BOIS, scelles et statut exporte.",bois_control;bois_export;controle_export,3
+bois_exploitant,Bois Exploitant,USAGER,BOIS,Exploitant forestier,communautaire,Declaration lots BOIS et cession vers acteurs autorises.,bois_declare_lot;bois_trade,2
+bois_exportateur,Bois Exportateur,USAGER,BOIS,Exportateur bois,central,Montage des dossiers export BOIS et transferts finaux.,bois_export;bois_trade;controle_export,3
+bois_forest_admin,Bois Forest Admin,TRANSVERSAL,BOIS,Administration forestiere,central,"Validation permis, laissez-passer et suivi conformite.",admin_filiere_bois;bois_control;bois_transport,3
+bois_transformateur,Bois Transformateur,TRANSVERSAL,BOIS,Scieur/Atelier,central,Transformation grumes vers lots scies et produits.,bois_trade;bois_transform,2
+bois_transporteur,Bois Transporteur,USAGER,BOIS,Transporteur bois,central,Transport national avec laissez-passer et scan QR.,bois_transport;lecture_seule,2
+centre_test,Centre Test,TRANSVERSAL,Administration,Centre agree de test/pesee,central,"Pesee, test purete et emission de certificat numerique lot.",controle_export,1
+collecteur,Collecteur,USAGER,Acteurs terrain,Collecteur,communautaire,"Acheteur intermediaire, consolidation lots et vente au comptoir.",card_collector_manage,1
+com,Com,OPERATEUR_PRIVE,Export et regulation,Centrale de l'Or de Madagascar,central,"Chaîne légale de l'or : enregistrement collecteurs, agrément comptoirs, validations avant export.",admin_filiere_or;card_validate_com;com_instruction_dossiers;com_parametrage_national;controle_export;odv_dtspm,6
+com_admin,Com Admin,OPERATEUR_PRIVE,Export et regulation,Centrale de l'Or de Madagascar,central,"Parametrage national OR, supervision et sanctions metier COM.",admin_filiere_or;audit_logs;card_validate_com;com_instruction_dossiers;com_parametrage_national;com_sanctions_metier;com_suivi_affiliations;com_validation_collecteur;controle_export,9
+com_agent,Com Agent,OPERATEUR_PRIVE,Export et regulation,Centrale de l'Or de Madagascar,central,Instruction dossiers OR et validation cartes collecteurs.,card_validate_com;com_instruction_dossiers;com_suivi_affiliations;com_validation_collecteur;controle_export,5
+commune,Commune,AGENT_ETAT,Territorial,Commune (Maire / Administration communale),territorial,"Role legacy commune, conserve pour retro-compatibilite RBAC/API/UI.",admin_commune;card_collector_manage;card_kara_manage;card_validate_commune,4
+commune_agent,Commune Agent,AGENT_ETAT,Territorial,Commune (Maire / Administration communale),territorial,Recensement de proximité; validation initiale; gestion comptes Mobile Money communaux; suivi recettes.,admin_commune;card_collector_manage;card_kara_manage;card_validate_commune,4
+comptoir_compliance,Comptoir Compliance,OPERATEUR_PRIVE,Export et regulation,Comptoir,central,Responsable conformite comptoir: controles documentaires et tracabilite.,audit_logs;controle_export,2
+comptoir_director,Comptoir Director,OPERATEUR_PRIVE,Export et regulation,Comptoir,central,Directeur comptoir: validation finale et supervision.,audit_logs;controle_export;dashboard_national,3
+comptoir_operator,Comptoir Operator,OPERATEUR_PRIVE,Export et regulation,Comptoir,central,"Operateur comptoir: reception lots, preparation dossier export.",controle_export,1
+controleur,Controleur,AGENT_ETAT,Controle,Contrôleur terrain,controle,"Scan QR, vérification lot/acteur, saisie observations/PV (inspections, violations, pénalités).",profil_controleur,1
+decentralisation,Decentralisation,TRANSVERSAL,Administration,Ministère de la Décentralisation / Collectivités,central,"Coordination avec régions/communes (recensement, ristournes, pilotage territorial).",lecture_seule;supervision_territoriale,2
+dgd,Dgd,TRANSVERSAL,Controle,Direction Générale des Douanes,central,Contrôle export/import; validation douanière; lutte contre fraude/contrebande.,controle_export;profil_controleur,2
+dirigeant,Dirigeant,OPERATEUR_PRIVE,Administration,Dirigeant / Pilote,central,"Pilotage et reporting (rapports, exports, ledger).",audit_logs;dashboard_national;dashboard_regional;supervision_recettes,4
+district_agent,District Agent,AGENT_ETAT,Territorial,District,territorial,Lecture et suivi district des operations.,dashboard_regional;lecture_seule,2
+douanes_agent,Douanes Agent,AGENT_ETAT,Controle,Douanes,controle,"Verification dossier export OR, scellage et PV controle.",controle_export;export_or_workflow;profil_controleur,3
+fnp,Fnp,TRANSVERSAL,Administration,Fonds National de Perequation,central,Beneficiaire de 10% de la ristourne miniere.,lecture_seule,1
+fokontany,Fokontany,AGENT_ETAT,Territorial,Fokontany (Chef Fokontany),communautaire,Attestation/identification locale; appui recensement; médiation terrain.,appui_fokontany,1
+forets,Forets,TRANSVERSAL,Administration,Ministère chargé de l'Environnement et des Forêts,central,"Tutelle technique filière bois : autorisations, contrôle, conformité, CITES si applicable.",admin_filiere_bois;controle_export,2
+gendarmerie,Gendarmerie,AGENT_ETAT,Controle,Gendarmerie Nationale,controle,Contrôles terrain et axes; lutte contre trafic; appui judiciaire.,profil_controleur,1
+gue,Gue,TRANSVERSAL,Export et regulation,Guichet Unique d'Exportation,central,"Guichet de controle export: verification documentaire, recouvrement et delivrance de conformite.",controle_export;gue_export,2
+gue_or_agent,Gue Or Agent,AGENT_ETAT,Export et regulation,GUE OR,central,Gestion workflow export OR au guichet unique.,controle_export;export_or_workflow;gue_export,3
+justice,Justice,TRANSVERSAL,Administration,Justice / Parquet (optionnel),judiciaire,Suites judiciaires aux infractions; réquisitions.,justice_requisition,1
+lab_bgglm,Lab Bgglm,AGENT_ETAT,Administration,BGGLM,central,"Saisie des analyses, titrages et certificats labo.",analyse_certification;bgglm_lab_entry;lecture_seule,3
+mef,Mef,TRANSVERSAL,Administration,Ministère de l'Économie et des Finances,central,"Tutelle financière : règles fiscales, redevances/ristournes, suivi des recettes.",dashboard_national;parametrage_fiscal;supervision_recettes,3
+mines_region_agent,Mines Region Agent,AGENT_ETAT,Controle,Direction regionale des Mines,territorial,Controle et rapports territoriaux sur la filiere OR.,dashboard_regional;lecture_seule;mines_territorial_control,3
+mmrs,Mmrs,TRANSVERSAL,Administration,Ministère des Mines et des Ressources Stratégiques,central,"Tutelle technique (mines) : réglementation, procédures, supervision or/petite mine/pierres.",admin_filiere_mines;dashboard_national,2
+orpailleur,Orpailleur,USAGER,Acteurs terrain,Orpailleur / Collecteur,communautaire,Acteur filière or.,,0
+pierre_admin_central,Pierre Admin Central,TRANSVERSAL,PIERRE,Admin central pierre,central,Parametrage central catalogue/regles et supervision filiere pierre.,audit_logs;pierre_catalog_admin;pierre_control;pierre_export,4
+pierre_collecteur,Pierre Collecteur,USAGER,PIERRE,Collecteur/Negociant pierre,communautaire,"Achat local, regroupement et cession des lots pierre.",pierre_declare_lot;pierre_trade,2
+pierre_commune_agent,Pierre Commune Agent,AGENT_ETAT,PIERRE,Commune Pierre,territorial,"Enrolement local, frais locaux et suivi territorial pierre.",admin_commune;pierre_declare_lot,2
+pierre_controleur_mines,Pierre Controleur Mines,AGENT_ETAT,PIERRE,Controleur Mines,controle,"Inspection, constats et PV pour la filiere pierre.",pierre_control;profil_controleur,2
+pierre_douanes,Pierre Douanes,AGENT_ETAT,PIERRE,Douanes Pierre,controle,"Controle export, scellage et statut exporte des lots pierre.",controle_export;pierre_control;pierre_export,3
+pierre_exploitant,Pierre Exploitant,USAGER,PIERRE,Exploitant pierre,communautaire,Declaration des lots pierre et vente locale autorisee.,pierre_declare_lot;pierre_trade,2
+pierre_exportateur,Pierre Exportateur,USAGER,PIERRE,Comptoir/Exportateur pierre,central,Montage dossiers export pierre et transferts finaux.,controle_export;pierre_export;pierre_trade,3
+pierre_lapidaire,Pierre Lapidaire,USAGER,PIERRE,Lapidaire/Transformateur,central,Tri/lavage/taille/polissage et transformation des lots pierre.,pierre_trade;pierre_transform,2
+pm,Pm,TRANSVERSAL,Administration,Primature (Coordination gouvernementale),strategique,"Pilotage intersectoriel, coordination des ministères, suivi du déploiement.",dashboard_national;lecture_seule;pilotage_kpi,3
+police,Police,AGENT_ETAT,Controle,Police Nationale / Sécurité Publique,controle,Contrôles terrain; sécurisation transports; constat d'infractions selon habilitations.,profil_controleur,1
+pr,Pr,TRANSVERSAL,Administration,Présidence de la République,strategique,"Orientation stratégique, arbitrages, suivi macro (indicateurs nationaux).",alertes_strategiques;dashboard_national;lecture_seule,3
+raffinerie_agent,Raffinerie Agent,OPERATEUR_PRIVE,Administration,Raffinerie,central,"Affinement, poinconnage et serialisation or.",controle_export;poinconnage_raffinerie,2
+raffinerie_conformite,Raffinerie Conformite,TRANSVERSAL,Administration,Raffinerie,central,Conformite reglementaire de la raffinerie.,audit_logs;controle_export,2
+raffinerie_operator,Raffinerie Operator,TRANSVERSAL,Administration,Raffinerie,central,Operateur raffinerie: transformation or brut vers produits raffines.,poinconnage_raffinerie,1
+raffinerie_supervisor,Raffinerie Supervisor,TRANSVERSAL,Administration,Raffinerie,central,Supervision des operations et des rendements de transformation.,audit_logs,1
+region,Region,AGENT_ETAT,Territorial,Région (Gouverneur / Chef de Région),territorial,Pilotage régional; coordination communes; suivi des ristournes régionales.,dashboard_regional;lecture_seule,2
+region_agent,Region Agent,AGENT_ETAT,Territorial,Region,territorial,Lecture et suivi regional des operations.,dashboard_regional;lecture_seule,2
+transporteur,Transporteur,USAGER,Acteurs terrain,Transporteur,central,"Transport des lots OR, scans QR de suivi, sans droit de vente.",lecture_seule;transport_or,2
+transporteur_agree,Transporteur Agree,USAGER,Acteurs terrain,Transporteur agree,central,Transport des lots avec tracabilite GPS depart/arrivee.,transport_or,1
+tresor,Tresor,TRANSVERSAL,Administration,Trésor Public,central,Réception des recettes État; comptabilisation; suivi des reversements.,lecture_seule;rapprochement,2

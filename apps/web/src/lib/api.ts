@@ -70,6 +70,28 @@ class ApiClient {
     return response.data
   }
 
+  async patchMe(data: {
+    nom?: string
+    prenoms?: string
+    date_naissance?: string
+    adresse_text?: string
+    cin?: string
+    cin_date_delivrance?: string
+    commune_code?: string
+    fokontany_code?: string
+  }) {
+    const response = await this.client.patch('/auth/me', data)
+    return response.data
+  }
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    const response = await this.client.post('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+    return response.data
+  }
+
   async refreshToken(refreshToken: string) {
     const response = await this.client.post('/auth/refresh', { refresh_token: refreshToken })
     return response.data
@@ -115,6 +137,14 @@ class ApiClient {
 
   async getActor(actorId: number) {
     const response = await this.client.get(`/actors/${actorId}`)
+    return response.data
+  }
+  async uploadActorPhoto(actorId: number, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await this.client.post(`/actors/${actorId}/photo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
     return response.data
   }
 
@@ -248,6 +278,21 @@ class ApiClient {
     const response = await this.client.get(`/lots/${lotId}`)
     return response.data
   }
+  async patchLotWoodClassification(
+    lotId: number,
+    data: {
+      wood_classification?: 'LEGAL_EXPORTABLE' | 'LEGAL_NON_EXPORTABLE' | 'ILLEGAL' | 'A_DETRUIRE'
+      cites_laf_status?: 'not_required' | 'required' | 'pending' | 'approved' | 'rejected'
+      cites_ndf_status?: 'not_required' | 'required' | 'pending' | 'approved' | 'rejected'
+      cites_international_status?: 'not_required' | 'required' | 'pending' | 'approved' | 'rejected'
+      destruction_status?: 'pending' | 'approved' | 'validated' | 'rejected' | 'destroyed'
+      destruction_evidence_urls?: string[]
+      notes?: string
+    }
+  ) {
+    const response = await this.client.patch(`/lots/${lotId}/wood-classification`, data)
+    return response.data
+  }
 
   async getTransactions(params?: {
     seller_actor_id?: number
@@ -350,6 +395,10 @@ class ApiClient {
     const response = await this.client.get(`/transactions/${transactionId}/payments`)
     return response.data
   }
+  async finalizeTransaction(transactionId: number) {
+    const response = await this.client.post(`/transactions/${transactionId}/finalize`)
+    return response.data
+  }
 
   // Exports (dossiers export)
   async getExports(params?: { status?: string; date_from?: string; date_to?: string; created_by_actor_id?: number }) {
@@ -357,7 +406,7 @@ class ApiClient {
     return response.data
   }
 
-  async createExport(data: { destination?: string; destination_country?: string; transport_mode?: string; total_weight?: number; declared_value?: number }) {
+  async createExport(data: { destination?: string; destination_commune_id?: number; destination_country?: string; transport_mode?: string; total_weight?: number; declared_value?: number }) {
     const response = await this.client.post('/exports', data)
     return response.data
   }
@@ -423,6 +472,15 @@ class ApiClient {
   async getDocument(documentId: number) {
     const response = await this.client.get(`/documents/${documentId}`)
     return response.data
+  }
+  async downloadDocumentFile(documentId: number): Promise<{ blob: Blob; filename: string }> {
+    const response = await this.client.get(`/documents/${documentId}/download`, { responseType: 'blob' })
+    const disposition = (response.headers['content-disposition'] || response.headers['Content-Disposition'] || '') as string
+    const match = disposition.match(/filename="?([^";]+)"?/)
+    return {
+      blob: response.data as Blob,
+      filename: match?.[1] || `document-${documentId}`,
+    }
   }
 
   async uploadDocument(data: {
@@ -612,6 +670,29 @@ class ApiClient {
     const response = await this.client.get('/or-compliance/cards/my')
     return response.data
   }
+  async requestCard(data: {
+    card_type: 'kara_bolamena' | 'collector_card' | 'bijoutier_card'
+    actor_id: number
+    commune_id: number
+    cin?: string
+    notes?: string
+  }) {
+    const response = await this.client.post('/or-compliance/cards/request', data)
+    return response.data
+  }
+  async validateCard(cardId: number, data: { card_type: 'kara_bolamena' | 'collector_card' | 'bijoutier_card'; decision: string; notes?: string }) {
+    const response = await this.client.post(`/or-compliance/cards/${cardId}/validate`, {
+      decision: data.decision,
+      notes: data.notes,
+    }, {
+      params: { card_type: data.card_type },
+    })
+    return response.data
+  }
+  async renderCard(cardId: number, params: { card_type: 'kara_bolamena' | 'collector_card' | 'bijoutier_card'; side: 'front' | 'back' }) {
+    const response = await this.client.get(`/or-compliance/cards/${cardId}/render`, { params })
+    return response.data
+  }
   async getCommuneCardQueue(params?: { status?: string; commune_id?: number }) {
     const response = await this.client.get('/or-compliance/cards/commune-queue', { params })
     return response.data
@@ -697,6 +778,16 @@ class ApiClient {
     const response = await this.client.get('/dashboards/commune', {
       params: { commune_id: communeId, ...params },
     })
+    return response.data
+  }
+
+  async getHomeWidgets() {
+    const response = await this.client.get('/dashboards/home-widgets')
+    return response.data
+  }
+
+  async publishInstitutionalMessage(message: string) {
+    const response = await this.client.post('/dashboards/institutional-message', { message })
     return response.data
   }
 
@@ -806,7 +897,9 @@ class ApiClient {
     return response.data
   }
 
-  async getEmergencyAlerts(params?: { status?: string; target_service?: 'police' | 'gendarmerie' | 'both' }) {
+  async getEmergencyAlerts(
+    params?: { status?: string; target_service?: 'police' | 'gendarmerie' | 'both' | 'bianco' | 'environnement' | 'institutionnel' }
+  ) {
     const response = await this.client.get('/emergency-alerts', { params })
     return response.data
   }
@@ -815,7 +908,7 @@ class ApiClient {
     title: string
     message: string
     severity?: 'medium' | 'high' | 'critical'
-    target_service?: 'police' | 'gendarmerie' | 'both'
+    target_service?: 'police' | 'gendarmerie' | 'both' | 'bianco' | 'environnement' | 'institutionnel'
     filiere?: string
     role_code?: string
     geo_point_id?: number
@@ -842,6 +935,71 @@ class ApiClient {
 
   async getVerifyInvoice(invoiceRef: string) {
     const response = await this.client.get(`/verify/invoice/${invoiceRef}`)
+    return response.data
+  }
+  async getVerifyCard(cardRef: string | number) {
+    const response = await this.client.get(`/verify/card/${cardRef}`)
+    return response.data
+  }
+
+  async listContactRequests(params?: { status?: string }) {
+    const response = await this.client.get('/messages/contacts', { params })
+    return response.data
+  }
+
+  async createContactRequest(targetActorId: number) {
+    const response = await this.client.post('/messages/contacts', { target_actor_id: targetActorId })
+    return response.data
+  }
+
+  async decideContactRequest(contactId: number, decision: 'accepted' | 'rejected') {
+    const response = await this.client.post(`/messages/contacts/${contactId}/decision`, { decision })
+    return response.data
+  }
+
+  async listMessages(params?: { with_actor_id?: number }) {
+    const response = await this.client.get('/messages', { params })
+    return response.data
+  }
+
+  async sendMessage(data: { receiver_actor_id: number; body: string }) {
+    const response = await this.client.post('/messages', data)
+    return response.data
+  }
+
+  async listMarketplaceOffers(params?: {
+    offer_type?: 'sell' | 'buy'
+    filiere?: string
+    commune_id?: number
+    min_price?: number
+    max_price?: number
+    min_quantity?: number
+    max_quantity?: number
+    status?: 'active' | 'closed' | 'cancelled'
+  }) {
+    const response = await this.client.get('/marketplace/offers', { params })
+    return response.data
+  }
+
+  async createMarketplaceOffer(data: {
+    offer_type: 'sell' | 'buy'
+    filiere: string
+    lot_id?: number
+    product_type: string
+    quantity: number
+    unit: string
+    unit_price: number
+    currency?: string
+    location_commune_id?: number
+    expires_at?: string
+    notes?: string
+  }) {
+    const response = await this.client.post('/marketplace/offers', data)
+    return response.data
+  }
+
+  async closeMarketplaceOffer(offerId: number) {
+    const response = await this.client.post(`/marketplace/offers/${offerId}/close`)
     return response.data
   }
 
@@ -944,14 +1102,59 @@ class ApiClient {
     const response = await this.client.get('/taxes', { params })
     return response.data
   }
+  async listTaxEvents(params?: { taxable_event_type?: string; status?: string; lot_id?: number }) {
+    const response = await this.client.get('/taxes/events', { params })
+    return response.data
+  }
+  async getTaxEvent(eventId: number) {
+    const response = await this.client.get(`/taxes/events/${eventId}`)
+    return response.data
+  }
+  async listLocalMarketValues(params?: { filiere?: string; substance?: string; status?: string }) {
+    const response = await this.client.get('/taxes/local-market-values', { params })
+    return response.data
+  }
+  async createLocalMarketValue(data: {
+    filiere?: string
+    substance: string
+    region_code?: string
+    commune_code?: string
+    unit: string
+    value_per_unit: number
+    currency?: string
+    legal_reference: string
+    version_tag: string
+    effective_from: string
+    effective_to?: string
+    status?: 'active' | 'inactive'
+  }) {
+    const response = await this.client.post('/taxes/local-market-values', data)
+    return response.data
+  }
   async createTaxEvent(data: {
     taxable_event_type: string
     taxable_event_id: string
-    base_amount: number
+    base_amount?: number
     currency?: string
+    filiere?: string
+    region_code?: string
+    assiette_mode?: 'manual' | 'fob_export' | 'local_market_value' | 'fixed_amount'
+    period_key?: string
+    reference_transaction?: string
+    substance?: string
+    quantity?: number
+    unit?: string
+    local_market_value_id?: number
+    local_market_value_override?: number
     lot_id?: number
     export_id?: number
     transaction_id?: number
+    payer_actor_id?: number
+    payer_role_code?: string
+    transformed?: boolean
+    transformation_origin?: 'national_refinery' | 'other'
+    unpaid_upstream_dtspm?: boolean
+    legal_key?: string
     commune_beneficiary_id?: number
     region_beneficiary_id?: number
     province_beneficiary_id?: number

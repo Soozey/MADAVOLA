@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 
-# Forcer UTF-8 pour éviter les problèmes d'accents (PostgreSQL)
+# Force UTF-8 to avoid accent encoding issues (PostgreSQL)
 _connect_args = {}
 if "postgresql" in settings.database_url:
     _connect_args["options"] = "-c client_encoding=UTF8"

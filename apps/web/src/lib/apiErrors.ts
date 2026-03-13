@@ -7,6 +7,10 @@ const LABELS: Record<string, string> = {
   compte_inactif: 'Compte désactivé.',
   identifiants_invalides: 'Identifiant ou mot de passe incorrect.',
   auth_desactivee: 'Compte désactivé. Contactez l\'administration.',
+  password_change_required: 'Changement de mot de passe requis avant de continuer.',
+  mot_de_passe_actuel_invalide: 'Mot de passe actuel incorrect.',
+  mot_de_passe_trop_court: 'Le nouveau mot de passe doit contenir au moins 8 caracteres.',
+  mot_de_passe_identique: 'Le nouveau mot de passe doit etre different de l ancien.',
   role_insuffisant: 'Droits insuffisants pour cette action.',
   permission_insuffisante: 'Habilitations insuffisantes.',
   acces_refuse: 'Accès refusé.',
@@ -31,13 +35,13 @@ const LABELS: Record<string, string> = {
 
 export function getApiErrorMessage(detail: ApiDetail | null | undefined, fallback = 'Une erreur est survenue.'): string {
   if (detail == null) return fallback
-  if (typeof detail === 'string') return LABELS[detail] ?? detail
+  if (typeof detail === 'string') return LABELS[detail] || detail
   if (Array.isArray(detail)) {
     const msgs = (detail as { msg?: string }[]).map((d) => d?.msg).filter(Boolean)
     return msgs.length ? msgs.join('. ') : fallback
   }
   if (typeof detail === 'object' && detail !== null && 'message' in detail)
-    return LABELS[(detail as { message: string }).message] ?? (detail as { message: string }).message ?? fallback
+    return LABELS[(detail as { message: string }).message] || (detail as { message: string }).message
   return fallback
 }
 

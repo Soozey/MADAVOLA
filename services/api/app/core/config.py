@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     document_storage_dir: str = "data/uploads"
     webhook_shared_secret: str | None = None
     webhook_ip_allowlist: str | None = None
+    card_qr_signing_secret: str | None = None
     @model_validator(mode="after")
     def build_database_url(self) -> "Settings":
         if self.database_url:

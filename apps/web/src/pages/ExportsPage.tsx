@@ -135,13 +135,35 @@ export default function ExportsPage() {
     <div className="dashboard">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <h1>Dossiers export</h1>
-        <button type="button" className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Annuler' : '+ Nouveau dossier'}
-        </button>
       </div>
       <p className="dashboard-subtitle">
         Comptoir: creation dossier, lien lots, preparation, controle, scellement, export.
       </p>
+      <div className="card tasks-of-day">
+        <h2>Taches du jour</h2>
+        <p className="process-label">
+          Creez le dossier export en priorite, puis completez les lots et les etapes de validation.
+        </p>
+        <div className="tasks-actions">
+          <button type="button" className="btn-primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Annuler la creation' : 'Creer un dossier export'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => document.getElementById('exports-list')?.scrollIntoView({ behavior: 'smooth' })}
+          >
+            Voir la liste des dossiers
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => document.getElementById('exports-advanced')?.scrollIntoView({ behavior: 'smooth' })}
+          >
+            Operations avancees
+          </button>
+        </div>
+      </div>
 
       {showForm && (
         <div className="card form-card">
@@ -207,7 +229,7 @@ export default function ExportsPage() {
 
       {isLoading && <div className="loading">Chargement...</div>}
       {!isLoading && (
-        <div className="card">
+        <div id="exports-list" className="card">
           <h2>Liste dossiers</h2>
           {exportsList.length === 0 ? (
             <p className="empty-state">Aucun dossier export.</p>
@@ -245,7 +267,7 @@ export default function ExportsPage() {
           )}
         </div>
       )}
-      <div className="card form-card" style={{ marginTop: '1rem' }}>
+      <div id="exports-advanced" className="card form-card" style={{ marginTop: '1rem' }}>
         <h2>Operations avancees dossier</h2>
         <div className="form-grid">
           <div className="form-group">

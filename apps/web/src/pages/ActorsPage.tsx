@@ -9,6 +9,12 @@ import { useSession } from '../contexts/SessionContext'
 import { getApiDetailFromError, getApiErrorMessage } from '../lib/apiErrors'
 import { useToast } from '../contexts/ToastContext'
 import { buildRoleOptionsByFilieres } from '../utils/rbacOptions'
+import {
+  BcmmLayerControls,
+  BcmmWmsLayers,
+  createDefaultBcmmLayerState,
+  type BcmmLayerState,
+} from '../components/BcmmWmsLayers'
 import './ActorsPage.css'
 
 const DEFAULT_LAT = -18.8792
@@ -51,6 +57,7 @@ export default function ActorsPage() {
   const [providerCode, setProviderCode] = useState('mvola')
   const [mapLat, setMapLat] = useState(DEFAULT_LAT)
   const [mapLon, setMapLon] = useState(DEFAULT_LON)
+  const [bcmmLayers, setBcmmLayers] = useState<BcmmLayerState>(createDefaultBcmmLayerState)
   const { selectedRole, selectedFiliere } = useSession()
   const [selectedRolesForCreate, setSelectedRolesForCreate] = useState<string[]>([
     defaultRoleFromSession(selectedRole),
@@ -337,6 +344,11 @@ export default function ActorsPage() {
   const isActorFacing = hasSessionRole ? actorFacingRoleSet.has(activeSessionRole) : userRoles.some((r) => actorFacingRoleSet.has(r))
   const pageTitle = isActorFacing ? 'Mon parcours acteur' : 'Acteurs'
   const activeCreateFiliere = (selectedFiliere ?? 'OR').toUpperCase() as (typeof FILIERE_OPTIONS)[number]
+  const primaryActionLabel = showForm
+    ? 'Annuler la saisie'
+    : isActorFacing
+      ? 'Demander activation / mise a jour'
+      : 'Inscrire un acteur'
   const roleOptionsForCreate = canManageActors
     ? availableRoleOptions
     : availableRoleOptions.filter((r) => r.value === activeSessionRole)
@@ -350,9 +362,36 @@ export default function ActorsPage() {
     <div className="actors-page">
       <div className="page-header">
         <h1>{pageTitle}</h1>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Annuler' : isActorFacing ? '+ Demander activation / mise a jour' : '+ Nouvel acteur'}
-        </button>
+      </div>
+
+      <div className="card tasks-of-day">
+        <h2>Taches du jour</h2>
+        <p className="process-label">
+          Commencez par l'action principale, puis utilisez les actions secondaires pour suivre la validation.
+        </p>
+        <div className="tasks-actions">
+          <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+            {primaryActionLabel}
+          </button>
+          {showValidationSection && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => document.getElementById('validation-queue')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              Demandes en attente ({pendingList.length})
+            </button>
+          )}
+          {canManageActors && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => document.getElementById('actors-registry')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              Voir le registre acteurs
+            </button>
+          )}
+        </div>
       </div>
 
       {!canManageActors && (
@@ -371,7 +410,7 @@ export default function ActorsPage() {
       )}
 
       {showValidationSection && (
-        <div className="card validation-card">
+        <div id="validation-queue" className="card validation-card">
           <h2>Validation mairie/commune apres paiement</h2>
           <div className="workflow-strip" aria-label="Etapes workflow">
             <span className="workflow-step active">1. Creation compte</span>
@@ -595,12 +634,14 @@ export default function ActorsPage() {
                 </div>
                 <div className="form-group form-group-map">
                   <label>Lieu inscription (cliquez sur la carte) *</label>
+                  <BcmmLayerControls layers={bcmmLayers} onChange={setBcmmLayers} />
                   <div className="map-wrapper">
                     <MapContainer center={[mapLat, mapLon]} zoom={6} style={{ height: '280px', width: '100%' }} scrollWheelZoom>
                       <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       />
+                      <BcmmWmsLayers layers={bcmmLayers} />
                       <MapClickHandler onSelect={(lat, lon) => { setMapLat(lat); setMapLon(lon) }} />
                       <Marker position={[mapLat, mapLon]} icon={defaultIcon}>
                         <Popup>Lieu inscription</Popup>
@@ -624,7 +665,7 @@ export default function ActorsPage() {
       )}
 
       {canManageActors && (
-        <div className="card">
+        <div id="actors-registry" className="card">
           <div className="table-container">
             <table>
               <thead>

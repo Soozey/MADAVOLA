@@ -13,6 +13,16 @@
   margin-bottom: var(--spacing-lg);
 }
 
+.tasks-of-day {
+  margin-bottom: var(--spacing-lg);
+}
+
+.tasks-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -23,6 +33,25 @@
 .form-group {
   display: flex;
   flex-direction: column;
+}
+
+.choice-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--spacing-xs);
+}
+
+.choice-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.choice-inline input {
+  width: auto;
 }
 
 .form-group-map {
@@ -67,10 +96,56 @@
 .validation-card h2 {
   margin-top: 0;
 }
+.workflow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: var(--spacing-md);
+}
+
+.workflow-step {
+  background: #e4ecf8;
+  color: #1d3764;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.workflow-step.active {
+  background: #c7daf8;
+}
 
 .btn-sm {
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: 0.875rem;
+}
+
+.icon-action {
+  min-width: 36px;
+  height: 32px;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.icon-action-approve {
+  background: #2f8f48;
+  color: #fff;
+}
+
+.icon-action-approve:hover:not(:disabled) {
+  background: #256f38;
+}
+
+.icon-action-reject {
+  background: #dc514a;
+  color: #fff;
+  border: none;
+}
+
+.icon-action-reject:hover:not(:disabled) {
+  background: #b93a34;
 }
 
 .role-empty-card {
@@ -79,6 +154,12 @@
 
 .table-container {
   overflow-x: auto;
+}
+
+.table-container table th,
+.table-container table td {
+  padding-left: 18px;
+  padding-right: 18px;
 }
 
 .status-badge {
@@ -90,11 +171,6 @@
   text-transform: uppercase;
 }
 
-.status-active {
-  background-color: #e8f5e9;
-  color: var(--color-success);
-}
-
 .status-inactive {
   background-color: #ffebee;
   color: var(--color-error);
@@ -103,6 +179,12 @@
 .status-pending {
   background-color: #fff3e0;
   color: var(--color-warning);
+}
+
+.status-paid,
+.status-active {
+  background-color: #e8f5e9;
+  color: var(--color-success);
 }
 
 .pagination {

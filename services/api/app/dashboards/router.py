@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.audit.logger import write_audit
 from app.auth.dependencies import get_current_actor, get_actor_role_codes, require_permission
 from app.auth.roles_config import (
     PERM_DASHBOARD_NATIONAL,
@@ -15,6 +16,7 @@ from app.auth.roles_config import (
 from app.common.errors import bad_request
 from app.core.config import settings
 from app.db import get_db
+from app.models.admin import SystemConfig
 from app.models.actor import Actor
 from app.models.export import ExportDossier
 from app.models.lot import InventoryLedger
@@ -25,9 +27,15 @@ from app.dashboards.schemas import (
     DashboardRegionalOut,
     DashboardCommuneOut,
     AlerteItem,
+    HomeWidgetsOut,
+    InstitutionalMessageIn,
 )
 
 router = APIRouter(prefix=f"{settings.api_prefix}/dashboards", tags=["dashboards"])
+
+
+def _get_config(db: Session, key: str) -> SystemConfig | None:
+    return db.query(SystemConfig).filter(SystemConfig.key == key).first()
 
 
 def _date_range(date_from: date | None, date_to: date | None) -> tuple[datetime, datetime]:
@@ -217,3 +225,96 @@ def dashboard_commune(
         nb_acteurs=nb_acteurs,
         nb_lots=nb_lots,
     )
+
+
+@router.get("/home-widgets", response_model=HomeWidgetsOut)
+def home_widgets(
+    db: Session = Depends(get_db),
+    _current_actor: Actor = Depends(get_current_actor),
+):
+    price_row = _get_config(db, "gold_price_value")
+    source_row = _get_config(db, "gold_price_source")
+    currency_row = _get_config(db, "gold_price_currency")
+    unit_row = _get_config(db, "gold_price_unit")
+    message_row = _get_config(db, "institutional_message")
+    message_version_row = _get_config(db, "institutional_message_version")
+    price_value = None
+    if price_row and (price_row.value or "").strip():
+        try:
+            price_value = float(price_row.value)
+        except Exception:
+            price_value = None
+    message_version = None
+    if message_version_row and (message_version_row.value or "").strip():
+        try:
+            message_version = int(message_version_row.value)
+        except Exception:
+            message_version = None
+    return HomeWidgetsOut(
+        gold_price_value=price_value,
+        gold_price_currency=(currency_row.value if currency_row and currency_row.value else "MGA"),
+        gold_price_unit=(unit_row.value if unit_row and unit_row.value else "g"),
+        gold_price_source=source_row.value if source_row else None,
+        gold_price_updated_at=price_row.updated_at.isoformat() if price_row and price_row.updated_at else None,
+        institutional_message=message_row.value if message_row else None,
+        institutional_message_version=message_version,
+        institutional_message_updated_at=message_row.updated_at.isoformat() if message_row and message_row.updated_at else None,
+    )
+
+
+@router.post("/institutional-message", response_model=HomeWidgetsOut)
+def publish_institutional_message(
+    payload: InstitutionalMessageIn,
+    db: Session = Depends(get_db),
+    current_actor: Actor = Depends(get_current_actor),
+):
+    role_codes = get_actor_role_codes(current_actor, db)
+    if set(role_codes).isdisjoint({"admin", "dirigeant", "president", "pr"}):
+        raise bad_request("acces_refuse")
+    message_text = (payload.message or "").strip()
+    if not message_text:
+        raise bad_request("message_obligatoire")
+    now = datetime.now(timezone.utc)
+    message_row = _get_config(db, "institutional_message")
+    if not message_row:
+        message_row = SystemConfig(
+            key="institutional_message",
+            value=message_text,
+            description="Message institutionnel affiche a l'accueil",
+            updated_by_actor_id=current_actor.id,
+            updated_at=now,
+        )
+        db.add(message_row)
+    else:
+        message_row.value = message_text
+        message_row.updated_by_actor_id = current_actor.id
+        message_row.updated_at = now
+    version_row = _get_config(db, "institutional_message_version")
+    if not version_row:
+        version_row = SystemConfig(
+            key="institutional_message_version",
+            value="1",
+            description="Version du message institutionnel",
+            updated_by_actor_id=current_actor.id,
+            updated_at=now,
+        )
+        db.add(version_row)
+    else:
+        try:
+            current_version = int(version_row.value or "0")
+        except Exception:
+            current_version = 0
+        version_row.value = str(current_version + 1)
+        version_row.updated_by_actor_id = current_actor.id
+        version_row.updated_at = now
+    db.commit()
+    write_audit(
+        db,
+        actor_id=current_actor.id,
+        action="institutional_message_published",
+        entity_type="system_config",
+        entity_id="institutional_message",
+        meta={"length": len(message_text)},
+    )
+    db.commit()
+    return home_widgets(db=db, _current_actor=current_actor)

@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import App from '../App'
@@ -60,17 +59,11 @@ describe('App smoke navigation', () => {
     getRbacPermissionsMock.mockResolvedValue({ role: 'orpailleur', permissions: ['auth.login'] })
   })
 
-  it('navigates role -> home with persisted filiere', async () => {
-    const user = userEvent.setup()
+  it('loads home directly with auto-selected role/filiere', async () => {
     renderApp()
 
-    expect(await screen.findByText('Choisir votre role')).toBeInTheDocument()
-    await user.click(await screen.findByText('Orpailleur'))
-    expect(await screen.findByText('Choisir votre filiere')).toBeInTheDocument()
-    await user.click(screen.getByTestId('filiere-validate'))
-
     expect(await screen.findByRole('heading', { name: 'Accueil' })).toBeInTheDocument()
-    expect(screen.getByText(/Fili[eè]re choisie:/i)).toHaveTextContent('OR')
+    expect(screen.getByText((content) => content.includes('Fili'))).toHaveTextContent('OR')
   })
 
   it.each(['OR', 'PIERRE', 'BOIS'] as const)(
@@ -82,7 +75,8 @@ describe('App smoke navigation', () => {
 
       renderApp()
       expect(await screen.findByRole('heading', { name: 'Accueil' })).toBeInTheDocument()
-      expect(screen.getByText(/Fili[eè]re choisie:/i)).toHaveTextContent(filiere)
+      expect(screen.getByText((content) => content.includes('Fili'))).toHaveTextContent(filiere)
     }
   )
 })
+

@@ -1,0 +1,16 @@
+{
+  "exclude_exact": [
+    {
+      "method": "POST",
+      "path": "/payments/webhooks/{}",
+      "reason": "Endpoint serveur-a-serveur (callback operateur), non expose en UI."
+    }
+  ],
+  "exclude_prefix": [
+    {
+      "prefix": "/docs",
+      "reason": "Documentation technique"
+    }
+  ]
+}
+

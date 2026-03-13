@@ -35,12 +35,6 @@ export const MENU_ITEMS: MenuItem[] = [
     roles: ['admin', 'dirigeant', 'commune_agent', 'commune'],
   },
   {
-    path: '/ma-carte',
-    label: 'Ma carte (QR)',
-    icon: 'QR',
-    roles: ['acteur', 'orpailleur', 'collecteur', 'bijoutier', 'admin', 'dirigeant', 'commune_agent'],
-  },
-  {
     path: '/actors',
     label: 'Acteurs',
     icon: 'ACT',
@@ -145,6 +139,18 @@ export const MENU_ITEMS: MenuItem[] = [
     label: 'Notifications',
     icon: 'NTF',
     roles: ['admin', 'dirigeant', 'acteur', 'orpailleur', 'collecteur', 'pierre_exploitant', 'pierre_collecteur', 'pierre_exportateur', 'bois_exploitant', 'bois_collecteur', 'bois_exportateur', 'bois_admin_central'],
+  },
+  {
+    path: '/messages',
+    label: 'Messagerie',
+    icon: 'MSG',
+    roles: ['admin', 'dirigeant', 'acteur', 'orpailleur', 'collecteur', 'bijoutier', 'pierre_exploitant', 'pierre_collecteur', 'bois_exploitant', 'bois_collecteur'],
+  },
+  {
+    path: '/marketplace',
+    label: 'Marketplace',
+    icon: 'MKT',
+    roles: ['admin', 'dirigeant', 'acteur', 'orpailleur', 'collecteur', 'bijoutier', 'pierre_exploitant', 'pierre_collecteur', 'pierre_lapidaire', 'bois_exploitant', 'bois_collecteur', 'bois_transformateur', 'bois_exportateur'],
   },
   {
     path: '/map',

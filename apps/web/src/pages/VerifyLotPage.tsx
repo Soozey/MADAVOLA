@@ -27,7 +27,13 @@ export default function VerifyLotPage() {
           <div className="info-item"><span className="info-label">Proprietaire</span><span className="info-value">{data.current_owner_actor_id}</span></div>
           <div className="info-item"><span className="info-label">Produit</span><span className="info-value">{data.product_type}</span></div>
           <div className="info-item"><span className="info-label">Quantite</span><span className="info-value">{data.quantity} {data.unit}</span></div>
-          <div className="info-item"><span className="info-label">Recu</span><span className="info-value">{data.declaration_receipt_number ?? '—'}</span></div>
+          <div className="info-item"><span className="info-label">Recu</span><span className="info-value">{data.declaration_receipt_number || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Numero lot</span><span className="info-value">{data.lot_number || '-'}</span></div>
+          <div className="info-item"><span className="info-label">ID tracabilite</span><span className="info-value">{data.traceability_id || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Origine</span><span className="info-value">{data.origin_reference || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Hash precedent</span><span className="info-value">{data.previous_block_hash || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Hash courant</span><span className="info-value">{data.current_block_hash || '-'}</span></div>
+          <div className="info-item"><span className="info-label">Historique</span><span className="info-value">{(data.transaction_history || []).join(' | ') || '-'}</span></div>
         </div>
       </div>
     </div>

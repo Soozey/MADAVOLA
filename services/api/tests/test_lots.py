@@ -5,6 +5,7 @@ import openpyxl
 
 from app.models.actor import Actor, ActorAuth
 from app.models.geo import GeoPoint
+from app.models.gold_ops import TransportEvent
 from app.models.payment import PaymentProvider, PaymentRequest
 from app.models.territory import Commune, District, Region, TerritoryVersion
 from app.auth.security import hash_password
@@ -151,6 +152,16 @@ def test_lot_create_and_transfer(client, db_session):
         external_ref="lot-pay-1",
     )
     db_session.add(payment_request)
+    db_session.add(
+        TransportEvent(
+            lot_id=lot["id"],
+            transporter_actor_id=seller.id,
+            depart_actor_id=seller.id,
+            arrival_actor_id=buyer.id,
+            depart_geo_point_id=geo.id,
+            status="in_transit",
+        )
+    )
     db_session.commit()
 
     transfer = client.post(

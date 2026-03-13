@@ -1,19 +1,38 @@
 from datetime import datetime, timezone
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.common.errors import bad_request
+from app.core.config import settings
 from app.db import get_db
 from app.models.actor import Actor, ActorRole
 from app.auth.security import decode_token
 from app.auth.roles_config import has_permission
 
 bearer_scheme = HTTPBearer(auto_error=False)
+AUTH_PATH_ALLOWLIST_FOR_PASSWORD_CHANGE = {
+    f"{settings.api_prefix}/auth/me",
+    f"{settings.api_prefix}/auth/change-password",
+    f"{settings.api_prefix}/auth/logout",
+    f"{settings.api_prefix}/auth/refresh",
+}
+
+
+def _enforce_password_rotation(actor: Actor, request: Request) -> None:
+    if not actor.auth:
+        return
+    if not bool(actor.auth.must_change_password):
+        return
+    current_path = request.url.path
+    if current_path in AUTH_PATH_ALLOWLIST_FOR_PASSWORD_CHANGE:
+        return
+    raise bad_request("password_change_required")
 
 
 def get_current_actor(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> Actor:
@@ -27,10 +46,12 @@ def get_current_actor(
     actor = db.query(Actor).filter_by(id=actor_id).first()
     if not actor or actor.status != "active":
         raise bad_request("compte_inactif")
+    _enforce_password_rotation(actor, request)
     return actor
 
 
 def get_optional_actor(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> Actor | None:
@@ -44,6 +65,7 @@ def get_optional_actor(
     actor = db.query(Actor).filter_by(id=actor_id).first()
     if not actor or actor.status != "active":
         raise bad_request("compte_inactif")
+    _enforce_password_rotation(actor, request)
     return actor
 
 

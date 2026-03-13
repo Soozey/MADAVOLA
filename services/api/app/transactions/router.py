@@ -10,12 +10,18 @@ from app.core.config import settings
 from app.db import get_db
 from app.models.actor import Actor, ActorRole
 from app.models.payment import Payment, PaymentProvider, PaymentRequest
+from app.models.invoice import Invoice
+from app.models.document import Document
 from app.models.lot import Lot
 from app.models.transaction import TradeTransaction, TradeTransactionItem
+from app.models.or_compliance import ComptoirLicense
+from app.or_compliance.rules import can_trade_or
+from app.payments.router import _finalize_transaction_success
 from app.transactions.schemas import (
     TransactionCreate,
     TransactionOut,
     TransactionDetailOut,
+    TransactionFinalizeOut,
     TransactionItemOut,
     TransactionPaymentInitiate,
     TransactionPaymentOut,
@@ -41,6 +47,7 @@ def create_transaction(
 
     total = Decimal("0.00")
     items = []
+    has_or_lot = False
     for item in payload.items:
         if item.lot_id is not None:
             lot = db.query(Lot).filter_by(id=item.lot_id).first()
@@ -52,11 +59,35 @@ def create_transaction(
                 raise bad_request("lot_non_disponible")
             if float(item.quantity) > float(lot.quantity):
                 raise bad_request("quantite_superieure_stock")
+            if lot.filiere == "OR":
+                has_or_lot = True
         qty = Decimal(str(item.quantity))
         unit = Decimal(str(item.unit_price))
         line_amount = qty * unit
         total += line_amount
         items.append((item, line_amount))
+
+    if has_or_lot:
+        allowed, reason = can_trade_or(db, payload.seller_actor_id, payload.buyer_actor_id)
+        if not allowed:
+            raise bad_request(reason or "transaction_or_bloquee")
+        seller_roles = _get_actor_roles(db, payload.seller_actor_id)
+        buyer_roles = _get_actor_roles(db, payload.buyer_actor_id)
+        if "orpailleur" in seller_roles and "collecteur" not in buyer_roles:
+            raise bad_request("chaine_or_invalide", {"expected_buyer_role": "collecteur"})
+        if "collecteur" in seller_roles and buyer_roles.isdisjoint({"comptoir_operator", "comptoir_compliance", "comptoir_director", "bijoutier"}):
+            raise bad_request("chaine_or_invalide", {"expected_buyer_role": "comptoir|bijoutier"})
+        if buyer_roles.intersection({"comptoir_operator", "comptoir_compliance", "comptoir_director"}):
+            license_row = (
+                db.query(ComptoirLicense)
+                .filter(ComptoirLicense.actor_id == payload.buyer_actor_id, ComptoirLicense.status == "active")
+                .order_by(ComptoirLicense.id.desc())
+                .first()
+            )
+            if not license_row:
+                raise bad_request("agrement_comptoir_invalide")
+            if license_row.access_sig_oc_suspended:
+                raise bad_request("sig_oc_suspendu")
 
     transaction = TradeTransaction(
         seller_actor_id=payload.seller_actor_id,
@@ -186,6 +217,15 @@ def _is_admin(db: Session, actor_id: int) -> bool:
     )
 
 
+def _get_actor_roles(db: Session, actor_id: int) -> set[str]:
+    rows = (
+        db.query(ActorRole.role)
+        .filter(ActorRole.actor_id == actor_id, ActorRole.status == "active")
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
 @router.post("/{transaction_id}/initiate-payment", response_model=TransactionPaymentOut, status_code=201)
 def initiate_transaction_payment(
     transaction_id: int,
@@ -273,3 +313,56 @@ def list_transaction_payments(
         )
         for p in payments
     ]
+
+
+@router.post("/{transaction_id}/finalize", response_model=TransactionFinalizeOut)
+def finalize_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    transaction = db.query(TradeTransaction).filter_by(id=transaction_id).first()
+    if not transaction:
+        raise bad_request("transaction_introuvable")
+    if not _is_admin(db, current_actor.id):
+        if current_actor.id not in (transaction.seller_actor_id, transaction.buyer_actor_id):
+            raise bad_request("acces_refuse")
+
+    payment_request = (
+        db.query(PaymentRequest)
+        .filter(PaymentRequest.transaction_id == transaction.id, PaymentRequest.status == "success")
+        .order_by(PaymentRequest.id.desc())
+        .first()
+    )
+    if not payment_request:
+        raise bad_request("paiement_non_confirme")
+    if transaction.status not in {"paid", "transferred"}:
+        _finalize_transaction_success(db, transaction, payment_request)
+        db.commit()
+        db.refresh(transaction)
+
+    invoice = db.query(Invoice).filter(Invoice.transaction_id == transaction.id).order_by(Invoice.id.desc()).first()
+    receipt_doc = (
+        db.query(Document)
+        .filter(Document.related_entity_type == "transaction", Document.related_entity_id == str(transaction.id), Document.doc_type == "receipt")
+        .order_by(Document.id.desc())
+        .first()
+    )
+    if not receipt_doc and invoice:
+        receipt_doc = (
+            db.query(Document)
+            .filter(
+                Document.related_entity_type == "invoice",
+                Document.related_entity_id == str(invoice.id),
+                Document.doc_type == "receipt",
+            )
+            .order_by(Document.id.desc())
+            .first()
+        )
+    return TransactionFinalizeOut(
+        transaction_id=transaction.id,
+        status=transaction.status,
+        invoice_number=invoice.invoice_number if invoice else None,
+        invoice_id=invoice.id if invoice else None,
+        receipt_document_id=receipt_doc.id if receipt_doc else None,
+    )

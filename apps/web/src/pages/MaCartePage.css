@@ -1,0 +1,35 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.status-pending_payment,
+.status-pending_validation {
+  background: #fff3e0;
+  color: #a85d00;
+}
+
+.status-validated {
+  background: #e8f5e9;
+  color: #1b6f2a;
+}
+
+.status-rejected,
+.status-revoked {
+  background: #ffebee;
+  color: #b4232a;
+}
+
+.status-suspended {
+  background: #fff8e1;
+  color: #845a00;
+}
+
+.status-expired {
+  background: #eceff1;
+  color: #455a64;
+}

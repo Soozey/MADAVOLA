@@ -376,3 +376,55 @@ def test_export_status_update_rbac(client, db_session):
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
+
+
+def test_export_create_allowed_for_bijoutier(client, db_session):
+    region, district, commune, version = _seed_territory(db_session)
+    bijoutier = _create_actor_with_role(
+        db_session, region, district, commune, version, "bijoutier@example.com", "bijoutier"
+    )
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": bijoutier.email, "password": "secret"},
+    )
+    token = login.json()["access_token"]
+
+    created = client.post(
+        "/api/v1/exports",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"destination": "Dubai", "total_weight": 6.5},
+    )
+    assert created.status_code == 201
+
+
+def test_export_approval_allowed_for_gue(client, db_session):
+    region, district, commune, version = _seed_territory(db_session)
+    acteur = _create_actor_with_role(db_session, region, district, commune, version, "acteur-gue@example.com", "acteur")
+    gue = _create_actor_with_role(db_session, region, district, commune, version, "gue@example.com", "gue")
+
+    login_acteur = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": acteur.email, "password": "secret"},
+    )
+    token_acteur = login_acteur.json()["access_token"]
+
+    created = client.post(
+        "/api/v1/exports",
+        headers={"Authorization": f"Bearer {token_acteur}"},
+        json={"destination": "Paris", "total_weight": 9.0},
+    )
+    export_id = created.json()["id"]
+
+    login_gue = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": gue.email, "password": "secret"},
+    )
+    token_gue = login_gue.json()["access_token"]
+    approved = client.patch(
+        f"/api/v1/exports/{export_id}/status",
+        headers={"Authorization": f"Bearer {token_gue}"},
+        json={"status": "approved"},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"

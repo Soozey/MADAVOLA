@@ -121,8 +121,14 @@ def create_admin_user():
         
         actor_result = db.execute(
             text("""
-                INSERT INTO actors (type_personne, nom, prenoms, email, telephone, region_id, district_id, commune_id, territory_version_id, status, created_at)
-                VALUES ('personne_physique', :nom, :prenoms, :email, :telephone, :region_id, :district_id, :commune_id, :version_id, 'active', :now)
+                INSERT INTO actors (
+                    type_personne, nom, prenoms, email, telephone, region_id, district_id, commune_id,
+                    territory_version_id, status, laissez_passer_access_status, agrement_status, sig_oc_access_status, created_at
+                )
+                VALUES (
+                    'personne_physique', :nom, :prenoms, :email, :telephone, :region_id, :district_id, :commune_id,
+                    :version_id, 'active', 'active', 'active', 'active', :now
+                )
                 RETURNING id
             """),
             {

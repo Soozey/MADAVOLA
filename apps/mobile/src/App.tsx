@@ -5,7 +5,7 @@ import type { FiliereCode, RbacRole } from './features/rbac/types'
 
 type VerifyKind = 'actor' | 'lot' | 'invoice'
 type TabKey = 'actors' | 'lots' | 'trades' | 'exports' | 'transports' | 'transformations' | 'verify' | 'notifications'
-type EntryStep = 'login' | 'role' | 'filiere' | 'dashboard'
+type EntryStep = 'login' | 'signup' | 'change_password' | 'role' | 'filiere' | 'dashboard'
 type TerritoryOption = { code: string; name: string }
 type CommuneFlatOption = { id: number; code: string; name: string; district_code: string; region_code: string }
 type CardRequestKind = 'kara_orpailleur' | 'collector_collecteur' | 'collector_bijoutier'
@@ -40,6 +40,61 @@ const TAB_HINTS: Record<TabKey, string> = {
   notifications: 'Suivre alertes, rappels et urgences terrain.',
 }
 
+const ROLE_PRIORITY = [
+  'admin',
+  'dirigeant',
+  'com_admin',
+  'com_agent',
+  'com',
+  'commune_agent',
+  'commune',
+]
+
+const FILIERES: FiliereCode[] = ['OR', 'PIERRE', 'BOIS']
+const SIGNUP_ROLE_OPTIONS: Array<{ code: string; label: string; filiere: FiliereCode }> = [
+  { code: 'orpailleur', label: 'Orpailleur', filiere: 'OR' },
+  { code: 'collecteur', label: 'Collecteur local', filiere: 'OR' },
+  { code: 'pierre_exploitant', label: 'Petit exploitant pierre', filiere: 'PIERRE' },
+  { code: 'bois_exploitant', label: 'Petit exploitant bois', filiere: 'BOIS' },
+]
+
+function normalizeRole(role: string | null | undefined): string {
+  return (role || '').trim().toLowerCase()
+}
+
+function extractActiveRoles(roles: Array<{ role: string; status?: string }>): string[] {
+  const active = roles
+    .filter((row) => (row.status || 'active').toLowerCase() === 'active')
+    .map((row) => normalizeRole(row.role))
+    .filter(Boolean)
+  if (active.length > 0) return Array.from(new Set(active))
+  return Array.from(new Set(roles.map((r) => normalizeRole(r.role)).filter(Boolean)))
+}
+
+function pickPrimaryRole(roles: Array<{ role: string; status?: string }>, currentRole?: string): string {
+  const source = extractActiveRoles(roles)
+  if (source.length === 0) return ''
+  const normalizedCurrent = normalizeRole(currentRole)
+  if (normalizedCurrent && source.includes(normalizedCurrent)) return normalizedCurrent
+  for (const candidate of ROLE_PRIORITY) {
+    if (source.includes(candidate)) return candidate
+  }
+  return source[0]
+}
+
+function inferFiliereFromRole(role: string): FiliereCode {
+  const normalized = normalizeRole(role)
+  if (normalized.startsWith('pierre_')) return 'PIERRE'
+  if (normalized.startsWith('bois_')) return 'BOIS'
+  return 'OR'
+}
+
+function resolveSessionFiliere(role: string, currentFiliere: string): FiliereCode {
+  const candidate = (currentFiliere || '').toUpperCase() as FiliereCode | ''
+  if (candidate && FILIERES.includes(candidate as FiliereCode)) return candidate as FiliereCode
+  return inferFiliereFromRole(role)
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('actors')
   const [token, setToken] = useState(localStorage.getItem(STORAGE_TOKEN_KEY) || '')
@@ -51,6 +106,12 @@ export default function App() {
   )
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [currentPasswordForChange, setCurrentPasswordForChange] = useState('')
+  const [newPasswordForChange, setNewPasswordForChange] = useState('')
+  const [confirmPasswordForChange, setConfirmPasswordForChange] = useState('')
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showSignupPassword, setShowSignupPassword] = useState(false)
+  const [showChangePasswords, setShowChangePasswords] = useState(false)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('')
   const [debug, setDebug] = useState<any>(null)
@@ -174,6 +235,9 @@ export default function App() {
     setMe(null)
     setSelectedRole('')
     setSelectedFiliere('')
+    setCurrentPasswordForChange('')
+    setNewPasswordForChange('')
+    setConfirmPasswordForChange('')
     setRolePermissions([])
     localStorage.removeItem(STORAGE_TOKEN_KEY)
     localStorage.removeItem(STORAGE_ROLE_KEY)
@@ -203,17 +267,6 @@ export default function App() {
           ...requestParams,
         },
       })
-      // Fallback strict demo: si aucun role remonte avec filtre RBAC utilisateur,
-      // on recharge le catalogue actif sans for_current_actor pour ne pas bloquer l'entree.
-      if (!Array.isArray(data) || data.length === 0) {
-        const fallback = await client.get('/rbac/roles', {
-          params: {
-            ...requestParams,
-            for_current_actor: false,
-          },
-        })
-        data = fallback.data
-      }
       setEntryRoles(Array.isArray(data) ? data : [])
     } catch (e: any) {
       if (isInvalidTokenError(e)) {
@@ -380,6 +433,7 @@ export default function App() {
   }
 
   const loadFiliereCatalog = async (filiere: string) => {
+    if (!token) return
     try {
       const [rolesRes, productRes, essenceRes] = await Promise.all([
         client.get('/rbac/roles', {
@@ -407,7 +461,6 @@ export default function App() {
   }
 
   const loadTerritories = async (nextRegionCode?: string, nextDistrictCode?: string, nextCommuneCode?: string) => {
-    if (!token) return
     setTerritoriesLoading(true)
     try {
       const { data: regionsData } = await client.get('/territories/regions')
@@ -477,6 +530,10 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!token) {
+      loadTerritories()
+      return
+    }
     refreshContext()
     loadFiliereCatalog(actorForm.filiere)
     loadEntryRoles()
@@ -492,12 +549,52 @@ export default function App() {
 
   useEffect(() => {
     if (!token) {
-      setEntryStep('login')
+      if (entryStep !== 'signup') {
+        setEntryStep('login')
+      }
       return
     }
-    if (selectedRole && selectedFiliere) {
+    if (me?.must_change_password) {
+      setEntryStep('change_password')
+      return
+    }
+    const availableRoles = extractActiveRoles(me?.roles || [])
+    const selectedRoleIsValid = !!selectedRole && availableRoles.includes(selectedRole)
+    if (selectedRole && !selectedRoleIsValid) {
+      setSelectedRole('')
+      setSelectedFiliere('')
+      localStorage.removeItem(STORAGE_ROLE_KEY)
+      localStorage.removeItem(STORAGE_FILIERE_KEY)
+      return
+    }
+    if (selectedRoleIsValid && selectedFiliere) {
       setEntryStep('dashboard')
       loadRolePermissions(selectedRole)
+      return
+    }
+    if (selectedRoleIsValid) {
+      setEntryStep('filiere')
+      return
+    }
+    if (availableRoles.length === 1) {
+      const autoRole = availableRoles[0]
+      const autoFiliere = resolveSessionFiliere(autoRole, selectedFiliere)
+      if (autoRole !== selectedRole) {
+        setSelectedRole(autoRole)
+        localStorage.setItem(STORAGE_ROLE_KEY, autoRole)
+      }
+      if (autoFiliere !== selectedFiliere) {
+        setSelectedFiliere(autoFiliere)
+        localStorage.setItem(STORAGE_FILIERE_KEY, autoFiliere)
+      }
+      setActorForm((p: any) => ({ ...p, filiere: autoFiliere, role: autoRole }))
+      setLotForm((p: any) => ({ ...p, filiere: autoFiliere }))
+      setEntryStep('dashboard')
+      loadRolePermissions(autoRole)
+      return
+    }
+    if (availableRoles.length > 1) {
+      setEntryStep('role')
       return
     }
     if (!selectedRole) {
@@ -506,7 +603,7 @@ export default function App() {
     }
     setEntryStep('filiere')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedRole, selectedFiliere])
+  }, [token, selectedRole, selectedFiliere, me])
 
   useEffect(() => {
     if (entryStep === 'role' && token) {
@@ -521,20 +618,6 @@ export default function App() {
     }
   }, [entryStep])
 
-  useEffect(() => {
-    const onPop = () => {
-      if (entryStep === 'dashboard') {
-        setEntryStep('filiere')
-        return
-      }
-      if (entryStep === 'filiere') {
-        setEntryStep('role')
-      }
-    }
-    window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
-  }, [entryStep])
-
   const login = async () => {
     setMessage('')
     setMessageType('')
@@ -543,11 +626,52 @@ export default function App() {
       const { data } = await client.post('/auth/login', { identifier, password })
       setToken(data.access_token)
       localStorage.setItem(STORAGE_TOKEN_KEY, data.access_token)
+      const authClient = axios.create({ baseURL: API_BASE_URL, headers: { Authorization: `Bearer ${data.access_token}` } })
+      let profile: any = null
+      try {
+        const meRes = await authClient.get('/auth/me')
+        profile = meRes.data
+        setMe(meRes.data)
+      } catch {
+        // fallback on local session values below
+      }
+      if (profile?.must_change_password) {
+        setCurrentPasswordForChange(password)
+        setNewPasswordForChange('')
+        setConfirmPasswordForChange('')
+        setEntryStep('change_password')
+        showSuccess('Connexion reussie. Changement de mot de passe obligatoire.')
+        return
+      }
+
+      const availableRoles = extractActiveRoles(profile?.roles || [])
       const storedRole = localStorage.getItem(STORAGE_ROLE_KEY) || ''
+      const validStoredRole = storedRole && availableRoles.includes(storedRole) ? storedRole : ''
+      const fallbackRole = validStoredRole || (availableRoles.length === 1 ? availableRoles[0] : '')
       const storedFiliere = (localStorage.getItem(STORAGE_FILIERE_KEY) as FiliereCode | null) || ''
-      setSelectedRole(storedRole)
-      setSelectedFiliere(storedFiliere)
-      setEntryStep(storedRole ? (storedFiliere ? 'dashboard' : 'filiere') : 'role')
+      const fallbackFiliere = fallbackRole ? resolveSessionFiliere(fallbackRole, storedFiliere) : ''
+
+      setSelectedRole(fallbackRole)
+      setSelectedFiliere(fallbackFiliere as FiliereCode | '')
+      if (fallbackRole) {
+        localStorage.setItem(STORAGE_ROLE_KEY, fallbackRole)
+      } else {
+        localStorage.removeItem(STORAGE_ROLE_KEY)
+      }
+      if (fallbackFiliere) {
+        localStorage.setItem(STORAGE_FILIERE_KEY, fallbackFiliere)
+      } else {
+        localStorage.removeItem(STORAGE_FILIERE_KEY)
+      }
+      if (fallbackRole && fallbackFiliere) {
+        setActorForm((p: any) => ({ ...p, filiere: fallbackFiliere, role: fallbackRole || p.role }))
+        setLotForm((p: any) => ({ ...p, filiere: fallbackFiliere }))
+      }
+      if (availableRoles.length > 1 && !fallbackRole) {
+        setEntryStep('role')
+      } else {
+        setEntryStep(fallbackRole ? 'dashboard' : 'role')
+      }
       showSuccess('Connexion reussie.')
     } catch (e: any) {
       showError(e, 'Echec de connexion')
@@ -559,8 +683,37 @@ export default function App() {
     showSuccess('Deconnexion effectuee.')
   }
 
+  const changePassword = async () => {
+    if (!currentPasswordForChange || !newPasswordForChange) {
+      return showError(null, 'Veuillez renseigner le mot de passe actuel et le nouveau mot de passe.')
+    }
+    if (newPasswordForChange.length < 8) {
+      return showError(null, 'Le nouveau mot de passe doit contenir au moins 8 caracteres.')
+    }
+    if (newPasswordForChange !== confirmPasswordForChange) {
+      return showError(null, 'La confirmation du nouveau mot de passe ne correspond pas.')
+    }
+    try {
+      await client.post('/auth/change-password', {
+        current_password: currentPasswordForChange,
+        new_password: newPasswordForChange,
+      })
+      setCurrentPasswordForChange('')
+      setNewPasswordForChange('')
+      setConfirmPasswordForChange('')
+      await refreshContext()
+      setSelectedRole('')
+      setSelectedFiliere('')
+      localStorage.removeItem(STORAGE_ROLE_KEY)
+      localStorage.removeItem(STORAGE_FILIERE_KEY)
+      setEntryStep('role')
+      showSuccess('Mot de passe mis a jour.')
+    } catch (e: any) {
+      showError(e, 'Echec changement mot de passe')
+    }
+  }
+
   const createActor = async () => {
-    if (!token) return showError(null, "Connectez-vous d'abord")
     if (!actorForm.region_code || !actorForm.district_code || !actorForm.commune_code) {
       return showError(null, 'Veuillez selectionner Region, District et Commune')
     }
@@ -590,8 +743,14 @@ export default function App() {
         filieres: [actorForm.filiere],
       }
       const { data } = await client.post('/actors', payload)
-      showSuccess(`Acteur cree #${data.id}`)
-      await refreshContext()
+      showSuccess(`Inscription enregistree #${data.id}`)
+      if (token) {
+        await refreshContext()
+      } else {
+        setIdentifier(actorForm.email || actorForm.telephone || '')
+        setPassword('')
+        setEntryStep('login')
+      }
     } catch (e: any) {
       showError(e, "Echec de creation de l'acteur")
     }
@@ -603,25 +762,18 @@ export default function App() {
     setMessageType('')
     setDebug(null)
     try {
-      let data
-      if (cardRequestKind === 'kara_orpailleur') {
-        data = (await client.post('/or-compliance/kara-cards', {
-          actor_id: me.id,
-          commune_id: me.commune.id,
-          cin: cardCin || me.cin || 'CIN_NON_RENSEIGNE',
-          nationality: 'mg',
-          residence_verified: true,
-          tax_compliant: true,
-          zone_allowed: true,
-          public_order_clear: true,
-        })).data
-      } else {
-        data = (await client.post('/or-compliance/collector-cards', {
-          actor_id: me.id,
-          issuing_commune_id: me.commune.id,
-          notes: cardRequestKind === 'collector_bijoutier' ? 'demande_bijoutier' : 'demande_collecteur',
-        })).data
-      }
+      const data = (await client.post('/or-compliance/cards/request', {
+        card_type:
+          cardRequestKind === 'kara_orpailleur'
+            ? 'kara_bolamena'
+            : cardRequestKind === 'collector_bijoutier'
+              ? 'bijoutier_card'
+              : 'collector_card',
+        actor_id: me.id,
+        commune_id: me.commune.id,
+        cin: cardCin || me.cin || undefined,
+        notes: cardRequestKind === 'collector_bijoutier' ? 'demande_bijoutier' : undefined,
+      })).data
       setDebug(data)
       showSuccess(`Demande carte enregistree (#${data.id})`)
       await refreshContext()
@@ -646,11 +798,10 @@ export default function App() {
     setMessage('')
     setMessageType('')
     try {
-      if (cardType === 'kara_bolamena') {
-        await client.patch(`/or-compliance/kara-cards/${cardId}/decision`, { decision, notes: 'decision_commune_mobile' })
-      } else {
-        await client.patch(`/or-compliance/collector-cards/${cardId}/decision`, { decision, notes: 'decision_commune_mobile' })
-      }
+      await client.post(`/or-compliance/cards/${cardId}/validate`, {
+        decision,
+        notes: 'decision_commune_mobile',
+      }, { params: { card_type: cardType } })
       showSuccess(`Decision enregistree pour ${cardType} #${cardId}`)
       await refreshContext()
     } catch (e: any) {
@@ -1035,8 +1186,130 @@ export default function App() {
           <h2 className="title">Connexion</h2>
           <div className="row">
             <input placeholder="email ou téléphone" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
-            <input placeholder="mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              placeholder="mot de passe"
+              type={showLoginPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button className="secondary" onClick={() => setShowLoginPassword((v) => !v)}>
+              {showLoginPassword ? 'Masquer' : 'Afficher'}
+            </button>
             <button onClick={login}>Se connecter</button>
+            <button
+              className="secondary"
+              onClick={() => {
+                const signupRole = SIGNUP_ROLE_OPTIONS[0]
+                setActorForm((p: any) => ({ ...p, role: signupRole.code, filiere: signupRole.filiere }))
+                setEntryStep('signup')
+                loadTerritories()
+              }}
+            >
+              S'inscrire
+            </button>
+          </div>
+        </div>
+      )}
+
+      {entryStep === 'signup' && (
+        <div className="card">
+          <h2 className="title">Inscription</h2>
+          <small>Choisissez votre role une seule fois.</small>
+          <div className="row" style={{ marginTop: 8 }}>
+            <select
+              value={actorForm.role}
+              onChange={(e) => {
+                const selected = SIGNUP_ROLE_OPTIONS.find((r) => r.code === e.target.value) || SIGNUP_ROLE_OPTIONS[0]
+                setActorForm((p: any) => ({ ...p, role: selected.code, filiere: selected.filiere }))
+              }}
+            >
+              {SIGNUP_ROLE_OPTIONS.map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.label}</option>
+              ))}
+            </select>
+            <input placeholder="Nom" value={actorForm.nom} onChange={(e) => setActorForm((p: any) => ({ ...p, nom: e.target.value }))} />
+            <input placeholder="Prenoms" value={actorForm.prenoms} onChange={(e) => setActorForm((p: any) => ({ ...p, prenoms: e.target.value }))} />
+            <input placeholder="Telephone" value={actorForm.telephone} onChange={(e) => setActorForm((p: any) => ({ ...p, telephone: e.target.value }))} />
+            <input placeholder="Email" value={actorForm.email} onChange={(e) => setActorForm((p: any) => ({ ...p, email: e.target.value }))} />
+            <input
+              placeholder="Mot de passe"
+              type={showSignupPassword ? 'text' : 'password'}
+              value={actorForm.password}
+              onChange={(e) => setActorForm((p: any) => ({ ...p, password: e.target.value }))}
+            />
+            <button className="secondary" onClick={() => setShowSignupPassword((v) => !v)}>
+              {showSignupPassword ? 'Masquer' : 'Afficher'}
+            </button>
+            <select
+              value={actorForm.region_code}
+              onChange={async (e) => {
+                const nextRegion = e.target.value
+                await loadTerritories(nextRegion)
+              }}
+            >
+              <option value="">Region</option>
+              {regions.map((r) => (
+                <option key={r.code} value={r.code}>{r.code} - {r.name}</option>
+              ))}
+            </select>
+            <select
+              value={actorForm.district_code}
+              onChange={async (e) => {
+                const nextDistrict = e.target.value
+                await loadTerritories(actorForm.region_code, nextDistrict)
+              }}
+            >
+              <option value="">District</option>
+              {districts.map((d) => (
+                <option key={d.code} value={d.code}>{d.code} - {d.name}</option>
+              ))}
+            </select>
+            <select
+              value={actorForm.commune_code}
+              onChange={async (e) => {
+                const nextCommune = e.target.value
+                await loadTerritories(actorForm.region_code, actorForm.district_code, nextCommune)
+              }}
+            >
+              <option value="">Commune</option>
+              {communes.map((c) => (
+                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+              ))}
+            </select>
+            <button onClick={createActor} disabled={territoriesLoading}>S'inscrire</button>
+            <button className="secondary" onClick={() => setEntryStep('login')}>Retour connexion</button>
+          </div>
+        </div>
+      )}
+
+      {entryStep === 'change_password' && (
+        <div className="card">
+          <h2 className="title">Securite du compte</h2>
+          <small>Premier acces: changement de mot de passe obligatoire.</small>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="secondary" onClick={() => setShowChangePasswords((v) => !v)}>
+              {showChangePasswords ? 'Masquer mots de passe' : 'Afficher mots de passe'}
+            </button>
+            <input
+              placeholder="Mot de passe actuel"
+              type={showChangePasswords ? 'text' : 'password'}
+              value={currentPasswordForChange}
+              onChange={(e) => setCurrentPasswordForChange(e.target.value)}
+            />
+            <input
+              placeholder="Nouveau mot de passe"
+              type={showChangePasswords ? 'text' : 'password'}
+              value={newPasswordForChange}
+              onChange={(e) => setNewPasswordForChange(e.target.value)}
+            />
+            <input
+              placeholder="Confirmer nouveau mot de passe"
+              type={showChangePasswords ? 'text' : 'password'}
+              value={confirmPasswordForChange}
+              onChange={(e) => setConfirmPasswordForChange(e.target.value)}
+            />
+            <button onClick={changePassword}>Mettre a jour</button>
+            <button className="secondary" onClick={logout}>Se deconnecter</button>
           </div>
         </div>
       )}
@@ -1250,8 +1523,8 @@ export default function App() {
 
           <h2 className="title" style={{ marginTop: 16 }}>Mes cartes</h2>
           <ul>
-            {(myOrCards.kara_cards || []).map((c: any) => <li key={`k-${c.id}`}>Kara #{c.id} | {c.status}</li>)}
-            {(myOrCards.collector_cards || []).map((c: any) => <li key={`c-${c.id}`}>Collecteur #{c.id} | {c.status}</li>)}
+            {(myOrCards.kara_cards || []).map((c: any) => <li key={`k-${c.id}`}>Kara {c.card_number || `#${c.id}`} | {c.status} | exp={c.expires_at || '-'}</li>)}
+            {(myOrCards.collector_cards || []).map((c: any) => <li key={`c-${c.id}`}>{c.role === 'bijoutier' ? 'Bijoutier' : 'Collecteur'} {c.card_number || `#${c.id}`} | {c.status} | exp={c.expires_at || '-'}</li>)}
             {(myOrCards.kara_cards || []).length === 0 && (myOrCards.collector_cards || []).length === 0 && <li>Aucune carte.</li>}
           </ul>
 
@@ -1559,6 +1832,9 @@ export default function App() {
               <option value="both">Police + Gendarmerie</option>
               <option value="police">police</option>
               <option value="gendarmerie">gendarmerie</option>
+              <option value="bianco">bianco</option>
+              <option value="environnement">environnement</option>
+              <option value="institutionnel">institutionnel</option>
             </select>
             <select value={emergencyForm.severity} onChange={(e) => setEmergencyForm((p: any) => ({ ...p, severity: e.target.value }))}>
               <option value="medium">Moyenne</option>

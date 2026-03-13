@@ -490,6 +490,18 @@ def link_lots_to_export(
                 )
                 if not approved:
                     raise bad_request("export_bois_bloque_essence_a")
+            if (lot.wood_classification or "").upper() in {"ILLEGAL", "A_DETRUIRE"}:
+                raise bad_request("export_bois_classification_invalide", {"classification": lot.wood_classification})
+            if (lot.wood_classification or "").upper() == "LEGAL_NON_EXPORTABLE":
+                raise bad_request("export_bois_non_exportable")
+            requires_cites = bool(essence.requires_cites) if essence else False
+            if requires_cites or (essence and essence.categorie == "A_protegee"):
+                if (lot.cites_laf_status or "").lower() != "approved":
+                    raise bad_request("laf_obligatoire")
+                if (lot.cites_ndf_status or "").lower() != "approved":
+                    raise bad_request("ndf_obligatoire")
+                if (lot.cites_international_status or "").lower() != "approved":
+                    raise bad_request("validation_internationale_obligatoire")
 
         existing = (
             db.query(ExportLot)

@@ -1,4 +1,4 @@
-﻿# secrets
+# secrets
 .env
 .env.*
 !.env.example
@@ -24,3 +24,20 @@ venv/
 # IDE
 .vscode/
 .idea/
+
+# Local runtime artifacts
+*.log
+*.db
+*.sqlite
+*.sqlite3
+tmp_*.xml
+
+# Generated test artifacts
+test-results/
+coverage/
+**/.tmp_uploads/
+
+# Generated local reports/exports
+docs/.tmp_*.txt
+exports/
+services/api/exports/

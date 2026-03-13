@@ -158,3 +158,74 @@ def test_refresh_and_logout(client, db_session):
 
     stored = db_session.query(RefreshToken).filter_by(actor_id=1).all()
     assert any(t.revoked_at is not None for t in stored)
+
+
+def test_patch_me_profile_updates_identity_and_territory(client, db_session):
+    region, district, commune, fokontany, version = _seed_territory(db_session)
+    second_commune = Commune(
+        version_id=version.id,
+        district_id=district.id,
+        code="010102",
+        name="Antananarivo II",
+        name_normalized="antananarivo ii",
+    )
+    db_session.add(second_commune)
+    db_session.flush()
+    second_fokontany = Fokontany(
+        version_id=version.id,
+        commune_id=second_commune.id,
+        code="010102-001",
+        name="Soanierana",
+        name_normalized="soanierana",
+    )
+    db_session.add(second_fokontany)
+    db_session.commit()
+
+    actor = _create_actor(db_session, region, district, commune, fokontany, version)
+    db_session.add(
+        ActorRole(
+            actor_id=actor.id,
+            role="orpailleur",
+            status="active",
+            valid_from=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "test@example.com", "password": "secret"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    patched = client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={
+            "nom": "Rakoto",
+            "prenoms": "Jean",
+            "date_naissance": "1995-04-12",
+            "adresse_text": "Fokontany Soanierana, lot 12",
+            "cin": "123 456 789 012",
+            "cin_date_delivrance": "2020-01-02",
+            "commune_code": "010102",
+            "fokontany_code": "010102-001",
+        },
+    )
+    assert patched.status_code == 200
+    payload = patched.json()
+    assert payload["nom"] == "Rakoto"
+    assert payload["prenoms"] == "Jean"
+    assert payload["cin"] == "123456789012"
+    assert payload["commune"]["code"] == "010102"
+    assert payload["fokontany"]["code"] == "010102-001"
+    assert payload["adresse_text"] == "Fokontany Soanierana, lot 12"
+
+    invalid_cin = client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"cin": "12345"},
+    )
+    assert invalid_cin.status_code == 400

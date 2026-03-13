@@ -1,15 +1,22 @@
+import hashlib
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor, get_optional_actor
 from app.common.errors import bad_request
+from app.common.card_identity import build_receipt_number
+from app.common.receipts import build_simple_pdf
 from app.core.config import settings
 from app.db import get_db
 from datetime import datetime, timezone
 
 from app.fees.schemas import FeeActorMarkPaid, FeeCreate, FeeOut, FeePaymentInitiate, FeePaymentOut, FeeStatusUpdate
 from app.models.actor import Actor, ActorRole
+from app.models.document import Document
 from app.models.fee import Fee
+from app.models.or_compliance import CollectorCard, KaraBolamenaCard
 from app.models.payment import Payment, PaymentProvider, PaymentRequest
 from app.models.territory import Commune, TerritoryVersion
 from app.or_compliance.fee_split import allocate_collector_card_fee_split
@@ -66,6 +73,8 @@ def create_fee(
         currency=fee.currency,
         status=fee.status,
         commune_mobile_money_msisdn=commune.mobile_money_msisdn if commune else None,
+        receipt_number=fee.receipt_number,
+        receipt_document_id=fee.receipt_document_id,
     )
 
 
@@ -99,6 +108,8 @@ def list_fees(
             currency=fee.currency,
             status=fee.status,
             commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+            receipt_number=fee.receipt_number,
+            receipt_document_id=fee.receipt_document_id,
         )
         for fee in fees
     ]
@@ -130,6 +141,8 @@ def get_fee(
         currency=fee.currency,
         status=fee.status,
         commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+        receipt_number=fee.receipt_number,
+        receipt_document_id=fee.receipt_document_id,
     )
 
 
@@ -220,6 +233,8 @@ def update_fee_status(
     fee.paid_at = datetime.now(timezone.utc) if new_status == "paid" else None
     if new_status == "paid":
         allocate_collector_card_fee_split(db, fee)
+        _sync_card_status_after_fee_paid(db, fee.id)
+        _ensure_fee_receipt_document(db, fee, actor_id=current_actor.id, payment_ref=None)
     db.commit()
     db.refresh(fee)
     return FeeOut(
@@ -231,6 +246,8 @@ def update_fee_status(
         currency=fee.currency,
         status=fee.status,
         commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+        receipt_number=fee.receipt_number,
+        receipt_document_id=fee.receipt_document_id,
     )
 
 
@@ -252,6 +269,8 @@ def actor_mark_fee_paid(
     fee.status = "paid"
     fee.paid_at = datetime.now(timezone.utc)
     allocate_collector_card_fee_split(db, fee)
+    _sync_card_status_after_fee_paid(db, fee.id)
+    _ensure_fee_receipt_document(db, fee, actor_id=current_actor.id, payment_ref=payload.payment_ref)
     db.commit()
     db.refresh(fee)
     return FeeOut(
@@ -263,6 +282,8 @@ def actor_mark_fee_paid(
         currency=fee.currency,
         status=fee.status,
         commune_mobile_money_msisdn=_get_commune_msisdn(db, fee.commune_id),
+        receipt_number=fee.receipt_number,
+        receipt_document_id=fee.receipt_document_id,
     )
 
 
@@ -298,3 +319,48 @@ def _get_active_commune_by_id(db: Session, commune_id: int) -> Commune | None:
         .filter(Commune.id == commune_id, Commune.version_id == active.id)
         .first()
     )
+
+
+def _sync_card_status_after_fee_paid(db: Session, fee_id: int) -> None:
+    for card in db.query(KaraBolamenaCard).filter(KaraBolamenaCard.fee_id == fee_id).all():
+        if (card.status or "").lower() == "pending":
+            card.status = "pending_validation"
+    for card in db.query(CollectorCard).filter(CollectorCard.fee_id == fee_id).all():
+        if (card.status or "").lower() == "pending":
+            card.status = "pending_validation"
+
+
+def _ensure_fee_receipt_document(db: Session, fee: Fee, actor_id: int, payment_ref: str | None) -> None:
+    if fee.receipt_document_id and fee.receipt_number:
+        return
+    now = datetime.now(timezone.utc)
+    receipt_number = build_receipt_number(fee.id, now)
+    lines = [
+        f"Recu: {receipt_number}",
+        f"Frais: {fee.fee_type}",
+        f"Acteur: {fee.actor_id}",
+        f"Commune: {fee.commune_id}",
+        f"Montant: {float(fee.amount):.2f} {fee.currency}",
+        f"Date paiement: {now.isoformat()}",
+        f"Reference paiement: {payment_ref or '-'}",
+    ]
+    content = build_simple_pdf("MADAVOLA - Recu frais", lines)
+    storage_dir = Path(settings.document_storage_dir)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{receipt_number}.pdf"
+    storage_path = storage_dir / filename
+    storage_path.write_bytes(content)
+    sha256 = hashlib.sha256(content).hexdigest()
+    document = Document(
+        doc_type="receipt",
+        owner_actor_id=fee.actor_id,
+        related_entity_type="fee",
+        related_entity_id=str(fee.id),
+        storage_path=str(storage_path),
+        original_filename=filename,
+        sha256=sha256,
+    )
+    db.add(document)
+    db.flush()
+    fee.receipt_number = receipt_number
+    fee.receipt_document_id = document.id

@@ -12,6 +12,16 @@
   font-size: 0.95rem;
 }
 
+.tasks-of-day {
+  margin-bottom: var(--spacing-lg);
+}
+
+.tasks-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

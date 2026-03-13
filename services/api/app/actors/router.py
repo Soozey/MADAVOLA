@@ -1,7 +1,10 @@
+import hashlib
 from datetime import datetime, timezone
 import json
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_actor, get_optional_actor, require_roles
@@ -15,6 +18,8 @@ from app.models.actor_filiere import ActorFiliere
 from app.models.fee import Fee
 from app.models.geo import GeoPoint
 from app.models.pierre import FeePolicy
+from app.models.document import Document
+from app.models.or_compliance import ComplianceNotification
 from app.models.territory import Commune, District, Fokontany, Region, TerritoryVersion
 from app.actors.schemas import (
     ActorCreate,
@@ -104,12 +109,16 @@ def create_actor(
         type_personne=payload.type_personne,
         nom=payload.nom,
         prenoms=payload.prenoms,
+        surnom=payload.surnom,
+        date_naissance=payload.date_naissance,
         cin=payload.cin,
+        cin_date_delivrance=payload.cin_date_delivrance,
         nif=payload.nif,
         stat=payload.stat,
         rccm=payload.rccm,
         telephone=payload.telephone,
         email=payload.email,
+        adresse_text=payload.adresse_text,
         region_id=region.id,
         district_id=district.id,
         commune_id=commune.id,
@@ -156,6 +165,7 @@ def create_actor(
         db.add(opening_fee)
 
     geo_point.actor_id = actor.id
+    _notify_signup_created(db, actor_id=actor.id, actor_name=actor.nom, commune_id=commune.id)
     write_audit(
         db,
         actor_id=actor.id,
@@ -167,24 +177,12 @@ def create_actor(
     )
     db.commit()
     db.refresh(actor)
-    return ActorOut(
-        id=actor.id,
-        type_personne=actor.type_personne,
-        nom=actor.nom,
-        prenoms=actor.prenoms,
-        telephone=actor.telephone,
-        email=actor.email,
-        status=actor.status,
-        region_code=region.code,
-        district_code=district.code,
-        commune_code=commune.code,
-        fokontany_code=fokontany.code if fokontany else None,
+    return _build_actor_out(
+        db,
+        actor,
         opening_fee_id=opening_fee.id if opening_fee else None,
         opening_fee_status=opening_fee.status if opening_fee else None,
         filieres=filieres,
-        laissez_passer_access_status=actor.laissez_passer_access_status,
-        agrement_status=actor.agrement_status,
-        sig_oc_access_status=actor.sig_oc_access_status,
     )
 
 
@@ -207,25 +205,7 @@ def get_actor(
         if actor.fokontany_id
         else None
     )
-    return ActorOut(
-        id=actor.id,
-        type_personne=actor.type_personne,
-        nom=actor.nom,
-        prenoms=actor.prenoms,
-        telephone=actor.telephone,
-        email=actor.email,
-        status=actor.status,
-        region_code=region.code if region else "",
-        district_code=district.code if district else "",
-        commune_code=commune.code if commune else "",
-        fokontany_code=fokontany.code if fokontany else None,
-        opening_fee_id=_get_opening_fee_id(db, actor.id),
-        opening_fee_status=_get_opening_fee_status(db, actor.id),
-        filieres=_get_actor_filieres(db, actor.id),
-        laissez_passer_access_status=actor.laissez_passer_access_status,
-        agrement_status=actor.agrement_status,
-        sig_oc_access_status=actor.sig_oc_access_status,
-    )
+    return _build_actor_out(db, actor)
 
 
 @router.get("/{actor_id}/roles")
@@ -268,7 +248,15 @@ def update_actor_status(
     if payload.status == "active" and _requires_commune_fee_validation(db, actor.id):
         if _get_opening_fee_status(db, actor.id) != "paid":
             raise bad_request("frais_ouverture_non_payes")
+    previous_status = actor.status
     actor.status = payload.status
+    _notify_signup_decision(
+        db,
+        actor_id=actor.id,
+        actor_name=actor.nom,
+        status=payload.status,
+        commune_id=actor.commune_id,
+    )
     write_audit(
         db,
         actor_id=current_actor.id,
@@ -276,37 +264,11 @@ def update_actor_status(
         entity_type="actor",
         entity_id=str(actor_id),
         justification=None,
-        meta={"new_status": payload.status},
+        meta={"old_status": previous_status, "new_status": payload.status},
     )
     db.commit()
     db.refresh(actor)
-    region = db.query(Region).filter_by(id=actor.region_id).first()
-    district = db.query(District).filter_by(id=actor.district_id).first()
-    commune = db.query(Commune).filter_by(id=actor.commune_id).first()
-    fokontany = (
-        db.query(Fokontany).filter_by(id=actor.fokontany_id).first()
-        if actor.fokontany_id
-        else None
-    )
-    return ActorOut(
-        id=actor.id,
-        type_personne=actor.type_personne,
-        nom=actor.nom,
-        prenoms=actor.prenoms,
-        telephone=actor.telephone,
-        email=actor.email,
-        status=actor.status,
-        region_code=region.code if region else "",
-        district_code=district.code if district else "",
-        commune_code=commune.code if commune else "",
-        fokontany_code=fokontany.code if fokontany else None,
-        opening_fee_id=_get_opening_fee_id(db, actor.id),
-        opening_fee_status=_get_opening_fee_status(db, actor.id),
-        filieres=_get_actor_filieres(db, actor.id),
-        laissez_passer_access_status=actor.laissez_passer_access_status,
-        agrement_status=actor.agrement_status,
-        sig_oc_access_status=actor.sig_oc_access_status,
-    )
+    return _build_actor_out(db, actor)
 
 
 @router.get("", response_model=list[ActorOut])
@@ -351,36 +313,69 @@ def list_actors(
     actors = query.distinct().order_by(Actor.created_at.desc()).all()
     results = []
     for actor in actors:
-        region = db.query(Region).filter_by(id=actor.region_id).first()
-        district = db.query(District).filter_by(id=actor.district_id).first()
-        commune = db.query(Commune).filter_by(id=actor.commune_id).first()
-        fokontany = (
-            db.query(Fokontany).filter_by(id=actor.fokontany_id).first()
-            if actor.fokontany_id
-            else None
-        )
         results.append(
-            ActorOut(
-                id=actor.id,
-                type_personne=actor.type_personne,
-                nom=actor.nom,
-                prenoms=actor.prenoms,
-                telephone=actor.telephone,
-                email=actor.email,
-                status=actor.status,
-                region_code=region.code if region else "",
-                district_code=district.code if district else "",
-                commune_code=commune.code if commune else "",
-                fokontany_code=fokontany.code if fokontany else None,
-                opening_fee_id=_get_opening_fee_id(db, actor.id),
-                opening_fee_status=_get_opening_fee_status(db, actor.id),
-                filieres=_get_actor_filieres(db, actor.id),
-                laissez_passer_access_status=actor.laissez_passer_access_status,
-                agrement_status=actor.agrement_status,
-                sig_oc_access_status=actor.sig_oc_access_status,
-            )
+            _build_actor_out(db, actor)
         )
     return results
+
+
+@router.post("/{actor_id}/photo")
+def upload_actor_photo(
+    actor_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_actor=Depends(get_current_actor),
+):
+    actor = db.query(Actor).filter_by(id=actor_id).first()
+    if not actor:
+        raise bad_request("acteur_introuvable")
+    if not _is_admin(db, current_actor.id) and current_actor.id != actor_id:
+        if not (_is_commune_agent(db, current_actor.id) and current_actor.commune_id == actor.commune_id):
+            raise bad_request("acces_refuse")
+    if not file.filename:
+        raise bad_request("fichier_obligatoire")
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise bad_request("format_photo_invalide")
+
+    storage_dir = Path(settings.document_storage_dir) / "actors"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    extension = Path(file.filename).suffix.lower() or ".jpg"
+    content = file.file.read()
+    if not content:
+        raise bad_request("fichier_vide")
+    sha256 = hashlib.sha256(content).hexdigest()
+    filename = f"actor-{actor_id}-{uuid4().hex}{extension}"
+    storage_path = storage_dir / filename
+    storage_path.write_bytes(content)
+
+    document = Document(
+        doc_type="actor_photo",
+        owner_actor_id=actor_id,
+        related_entity_type="actor",
+        related_entity_id=str(actor_id),
+        storage_path=str(storage_path),
+        original_filename=file.filename,
+        sha256=sha256,
+    )
+    db.add(document)
+    db.flush()
+    actor.photo_profile_url = f"{settings.api_prefix}/documents/{document.id}/download"
+    write_audit(
+        db,
+        actor_id=current_actor.id,
+        action="actor_photo_uploaded",
+        entity_type="actor",
+        entity_id=str(actor_id),
+        justification=None,
+        meta={"document_id": document.id},
+    )
+    db.commit()
+    return {
+        "actor_id": actor_id,
+        "document_id": document.id,
+        "photo_profile_url": actor.photo_profile_url,
+        "sha256": sha256,
+    }
 
 
 def _is_admin(db: Session, actor_id: int) -> bool:
@@ -457,6 +452,145 @@ def _resolve_opening_fee_amount(db: Session, commune_id: int, filiere: str) -> i
     if policy:
         return int(policy.amount)
     return 10000
+
+
+def _notify_signup_created(db: Session, actor_id: int, actor_name: str, commune_id: int) -> None:
+    recipient_ids = set()
+    commune_rows = (
+        db.query(ActorRole.actor_id)
+        .join(Actor, Actor.id == ActorRole.actor_id)
+        .filter(ActorRole.status == "active")
+        .filter(ActorRole.role.in_(["commune", "commune_agent"]))
+        .filter(Actor.commune_id == commune_id)
+        .filter(Actor.status == "active")
+        .all()
+    )
+    central_rows = (
+        db.query(ActorRole.actor_id)
+        .join(Actor, Actor.id == ActorRole.actor_id)
+        .filter(ActorRole.status == "active")
+        .filter(ActorRole.role.in_(["admin", "dirigeant"]))
+        .filter(Actor.status == "active")
+        .all()
+    )
+    recipient_ids.update(row[0] for row in commune_rows)
+    recipient_ids.update(row[0] for row in central_rows)
+    message = f"Nouvelle inscription en attente #{actor_id} ({actor_name})."
+    for recipient_id in recipient_ids:
+        _upsert_notification(
+            db=db,
+            entity_type="actor_signup",
+            entity_id=actor_id,
+            recipient_id=recipient_id,
+            message=message,
+        )
+
+
+def _notify_signup_decision(db: Session, actor_id: int, actor_name: str, status: str, commune_id: int) -> None:
+    status_label = "VALIDE" if status == "active" else "REJETE"
+    actor_message = f"Votre inscription #{actor_id} ({actor_name}) est {status_label}."
+    _upsert_notification(
+        db=db,
+        entity_type="actor_signup_status",
+        entity_id=actor_id,
+        recipient_id=actor_id,
+        message=actor_message,
+    )
+    commune_rows = (
+        db.query(ActorRole.actor_id)
+        .join(Actor, Actor.id == ActorRole.actor_id)
+        .filter(ActorRole.status == "active")
+        .filter(ActorRole.role.in_(["commune", "commune_agent"]))
+        .filter(Actor.commune_id == commune_id)
+        .filter(Actor.status == "active")
+        .all()
+    )
+    central_rows = (
+        db.query(ActorRole.actor_id)
+        .join(Actor, Actor.id == ActorRole.actor_id)
+        .filter(ActorRole.status == "active")
+        .filter(ActorRole.role.in_(["admin", "dirigeant"]))
+        .filter(Actor.status == "active")
+        .all()
+    )
+    recipient_ids = {row[0] for row in commune_rows}.union({row[0] for row in central_rows})
+    message = f"Inscription #{actor_id} ({actor_name}) {status_label.lower()}."
+    for recipient_id in recipient_ids:
+        _upsert_notification(
+            db=db,
+            entity_type="actor_signup_status",
+            entity_id=actor_id,
+            recipient_id=recipient_id,
+            message=message,
+        )
+
+
+def _upsert_notification(
+    db: Session,
+    entity_type: str,
+    entity_id: int,
+    recipient_id: int,
+    message: str,
+) -> None:
+    exists = (
+        db.query(ComplianceNotification.id)
+        .filter(ComplianceNotification.entity_type == entity_type)
+        .filter(ComplianceNotification.entity_id == entity_id)
+        .filter(ComplianceNotification.actor_id == recipient_id)
+        .filter(ComplianceNotification.message == message)
+        .first()
+    )
+    if exists:
+        return
+    db.add(
+        ComplianceNotification(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor_id=recipient_id,
+            channel="in_app",
+            days_before=0,
+            message=message,
+            status="sent",
+        )
+    )
+
+
+def _build_actor_out(
+    db: Session,
+    actor: Actor,
+    opening_fee_id: int | None = None,
+    opening_fee_status: str | None = None,
+    filieres: list[str] | None = None,
+) -> ActorOut:
+    region = db.query(Region).filter_by(id=actor.region_id).first()
+    district = db.query(District).filter_by(id=actor.district_id).first()
+    commune = db.query(Commune).filter_by(id=actor.commune_id).first()
+    fokontany = db.query(Fokontany).filter_by(id=actor.fokontany_id).first() if actor.fokontany_id else None
+    return ActorOut(
+        id=actor.id,
+        type_personne=actor.type_personne,
+        nom=actor.nom,
+        prenoms=actor.prenoms,
+        surnom=actor.surnom,
+        telephone=actor.telephone,
+        email=actor.email,
+        status=actor.status,
+        cin=actor.cin,
+        cin_date_delivrance=actor.cin_date_delivrance,
+        date_naissance=actor.date_naissance,
+        adresse_text=actor.adresse_text,
+        photo_profile_url=actor.photo_profile_url,
+        region_code=region.code if region else "",
+        district_code=district.code if district else "",
+        commune_code=commune.code if commune else "",
+        fokontany_code=fokontany.code if fokontany else None,
+        opening_fee_id=opening_fee_id if opening_fee_id is not None else _get_opening_fee_id(db, actor.id),
+        opening_fee_status=opening_fee_status if opening_fee_status is not None else _get_opening_fee_status(db, actor.id),
+        filieres=filieres if filieres is not None else _get_actor_filieres(db, actor.id),
+        laissez_passer_access_status=actor.laissez_passer_access_status,
+        agrement_status=actor.agrement_status,
+        sig_oc_access_status=actor.sig_oc_access_status,
+    )
 
 
 @router.post("/{actor_id}/kyc", response_model=ActorKYCOut, status_code=201)
