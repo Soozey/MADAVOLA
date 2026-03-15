@@ -22,9 +22,12 @@ from app.models.pierre import ActorAuthorization
 from app.models.tax import TaxRecord
 from app.models.territory import Region
 from app.models.transaction import TradeTransaction, TradeTransactionItem
+from app.models.or_compliance import ComptoirLicense
+from app.or_compliance.rules import can_trade_or
 from app.trades.schemas import TradeCreate, TradeItemCreate, TradeOut, TradePayIn
 
 router = APIRouter(prefix=f"{settings.api_prefix}/trades", tags=["trades"])
+COMPTOIR_BUYER_ROLES = {"comptoir_operator", "comptoir_compliance", "comptoir_director", "comptoir"}
 
 
 def _roles(db: Session, actor_id: int) -> set[str]:
@@ -68,6 +71,29 @@ def _ensure_bois_trade_path(db: Session, seller_id: int, buyer_id: int) -> None:
         allowed = True
     if not allowed:
         raise bad_request("rbac_trade_bois_refuse")
+
+
+def _ensure_or_trade_path(db: Session, seller_id: int, buyer_id: int) -> None:
+    allowed, reason = can_trade_or(db, seller_id, buyer_id)
+    if not allowed:
+        raise bad_request(reason or "transaction_or_bloquee")
+    seller_roles = _roles(db, seller_id)
+    buyer_roles = _roles(db, buyer_id)
+    if "orpailleur" in seller_roles and "collecteur" not in buyer_roles:
+        raise bad_request("chaine_or_invalide", {"expected_buyer_role": "collecteur"})
+    if "collecteur" in seller_roles and buyer_roles.isdisjoint(COMPTOIR_BUYER_ROLES.union({"bijoutier"})):
+        raise bad_request("chaine_or_invalide", {"expected_buyer_role": "comptoir|bijoutier"})
+    if buyer_roles.intersection(COMPTOIR_BUYER_ROLES):
+        license_row = (
+            db.query(ComptoirLicense)
+            .filter(ComptoirLicense.actor_id == buyer_id, ComptoirLicense.status == "active")
+            .order_by(ComptoirLicense.id.desc())
+            .first()
+        )
+        if not license_row:
+            raise bad_request("agrement_comptoir_invalide")
+        if license_row.access_sig_oc_suspended:
+            raise bad_request("sig_oc_suspendu")
 
 
 def _ensure_active_authorization(db: Session, actor_id: int, filiere: str) -> None:
@@ -277,6 +303,7 @@ def create_trade(
     if not seller or not buyer:
         raise bad_request("acteur_invalide")
 
+    has_or_lot = False
     for item in payload.items:
         lot = db.query(Lot).filter_by(id=item.lot_id).first()
         if not lot:
@@ -285,6 +312,8 @@ def create_trade(
             raise bad_request("lot_non_proprietaire")
         if lot.status == "exported":
             raise bad_request("lot_exported_transfer_blocked")
+        if lot.filiere == "OR":
+            has_or_lot = True
         if lot.filiere == "PIERRE":
             _ensure_active_authorization(db, payload.seller_actor_id, "PIERRE")
             _ensure_active_authorization(db, payload.buyer_actor_id, "PIERRE")
@@ -293,6 +322,8 @@ def create_trade(
             _ensure_active_authorization(db, payload.seller_actor_id, "BOIS")
             _ensure_active_authorization(db, payload.buyer_actor_id, "BOIS")
             _ensure_bois_trade_path(db, payload.seller_actor_id, payload.buyer_actor_id)
+    if has_or_lot:
+        _ensure_or_trade_path(db, payload.seller_actor_id, payload.buyer_actor_id)
 
     tx = TradeTransaction(
         seller_actor_id=payload.seller_actor_id,
@@ -391,6 +422,16 @@ def confirm_trade(
         raise bad_request("transaction_non_payee")
 
     items = db.query(TradeTransactionItem).filter(TradeTransactionItem.transaction_id == tx.id).all()
+    has_or_lot = False
+    for item in items:
+        lot = db.query(Lot).filter_by(id=item.lot_id).first()
+        if not lot:
+            raise bad_request("lot_introuvable")
+        if lot.filiere == "OR":
+            has_or_lot = True
+    if has_or_lot:
+        _ensure_or_trade_path(db, tx.seller_actor_id, tx.buyer_actor_id)
+
     for item in items:
         lot = db.query(Lot).filter_by(id=item.lot_id).first()
         if not lot:

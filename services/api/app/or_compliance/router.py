@@ -80,6 +80,11 @@ STATUS_REJECTED = "rejected"
 STATUS_EXPIRED = "expired"
 STATUS_SUSPENDED = "suspended"
 STATUS_REVOKED = "revoked"
+COLLECTOR_CARD_DEFAULT_FEE = Decimal("500000")
+KARA_CARD_DEFAULT_FEE = Decimal("4000")
+COMPTOIR_LICENSE_DEFAULT_FEE = Decimal("20000000")
+COMPTOIR_LICENSE_VALIDITY_DAYS = 730
+COMPTOIR_ROLE_SET = {"comptoir_operator", "comptoir_compliance", "comptoir_director"}
 
 
 def _display_status(value: str | None) -> str:
@@ -125,9 +130,11 @@ def _tariff_amount(db: Session, card_type: str, commune_id: int | None, now: dat
         if row.commune_id is None or row.commune_id == commune_id:
             return Decimal(str(row.amount))
     if card_type == "collector_card":
-        return Decimal("10000")
+        return COLLECTOR_CARD_DEFAULT_FEE
     if card_type == "kara_bolamena":
-        return Decimal("4000")
+        return KARA_CARD_DEFAULT_FEE
+    if card_type == "comptoir_license":
+        return COMPTOIR_LICENSE_DEFAULT_FEE
     return Decimal("10000")
 
 
@@ -530,6 +537,14 @@ def request_collector_card(
         raise bad_request("commune_invalide")
     if current_actor.id != payload.actor_id and current_actor.commune_id != payload.issuing_commune_id:
         raise bad_request("acces_refuse")
+    actor = db.query(Actor).filter_by(id=payload.actor_id).first()
+    if not actor:
+        raise bad_request("acteur_invalide")
+    if actor.status != "active":
+        raise bad_request("compte_inactif")
+    actor_roles = _active_roles(db, payload.actor_id)
+    if actor_roles.isdisjoint({"collecteur", "bijoutier"}):
+        raise bad_request("role_collecteur_requis")
     active_or_pending = (
         db.query(CollectorCard)
         .filter(
@@ -557,7 +572,6 @@ def request_collector_card(
     commune = db.query(Commune).filter_by(id=payload.issuing_commune_id).first()
     commune_code = commune.code if commune else "COMM"
     card_uid = build_prefixed_uid("MDV-CARD")
-    actor_roles = _active_roles(db, payload.actor_id)
     role_hint = "bijoutier" if ("bijoutier" in actor_roles or "bijoutier" in (payload.notes or "").lower()) else "collecteur"
     card_number = build_card_number(
         filiere="OR",
@@ -670,7 +684,7 @@ def decide_collector_card(
             .filter(
                 CollectorCardDocument.collector_card_id == card.id,
                 CollectorCardDocument.required == True,  # noqa: E712
-                CollectorCardDocument.status == "missing",
+                CollectorCardDocument.status != "verified",
             )
             .first()
         )
@@ -832,6 +846,8 @@ def submit_collector_affiliation(
     card = db.query(CollectorCard).filter_by(id=payload.collector_card_id).first()
     if not card:
         raise bad_request("carte_introuvable")
+    if _display_status(card.status) != STATUS_VALIDATED:
+        raise bad_request("carte_invalide")
     if current_actor.id != card.actor_id and current_actor.id != payload.affiliate_actor_id:
         raise bad_request("acces_refuse")
     if payload.affiliate_type not in {"comptoir", "bijouterie"}:
@@ -839,6 +855,13 @@ def submit_collector_affiliation(
     affiliate = db.query(Actor).filter_by(id=payload.affiliate_actor_id).first()
     if not affiliate:
         raise bad_request("acteur_invalide")
+    if affiliate.status != "active":
+        raise bad_request("acteur_invalide")
+    affiliate_roles = _active_roles(db, affiliate.id)
+    if payload.affiliate_type == "comptoir" and affiliate_roles.isdisjoint(COMPTOIR_ROLE_SET):
+        raise bad_request("acteur_affiliation_invalide")
+    if payload.affiliate_type == "bijouterie" and "bijoutier" not in affiliate_roles:
+        raise bad_request("acteur_affiliation_invalide")
 
     row = CollectorAffiliationAgreement(
         collector_card_id=card.id,
@@ -891,18 +914,45 @@ def create_comptoir_license(
     db: Session = Depends(get_db),
     current_actor=Depends(require_roles({"admin", "dirigeant", "com", "com_admin", "com_agent"})),
 ):
+    actor = db.query(Actor).filter_by(id=payload.actor_id).first()
+    if not actor:
+        raise bad_request("acteur_invalide")
+    if actor.status != "active":
+        raise bad_request("compte_inactif")
+    if (actor.type_personne or "").strip().lower() != "morale":
+        raise bad_request("type_personne_invalide")
+    if _active_roles(db, actor.id).isdisjoint(COMPTOIR_ROLE_SET):
+        raise bad_request("role_comptoir_requis")
     now = datetime.now(timezone.utc)
+    existing = (
+        db.query(ComptoirLicense.id)
+        .filter(
+            ComptoirLicense.actor_id == payload.actor_id,
+            ComptoirLicense.status.in_(["pending", "active"]),
+        )
+        .first()
+    )
+    if existing:
+        raise bad_request("licence_existante")
     row = ComptoirLicense(
         actor_id=payload.actor_id,
         status="active",
         issued_at=now,
-        expires_at=now + timedelta(days=365),
+        expires_at=now + timedelta(days=COMPTOIR_LICENSE_VALIDITY_DAYS),
         dtspm_status="ok",
         fx_repatriation_status="ok",
         access_sig_oc_suspended=False,
         cahier_des_charges_ref=payload.cahier_des_charges_ref,
     )
     db.add(row)
+    write_audit(
+        db,
+        actor_id=current_actor.id,
+        action="comptoir_license_created",
+        entity_type="comptoir_license",
+        entity_id="pending",
+        meta={"target_actor_id": payload.actor_id},
+    )
     db.commit()
     db.refresh(row)
     return _to_comptoir_out(row)

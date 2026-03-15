@@ -4,7 +4,7 @@ from app.auth.security import hash_password
 from app.models.actor import Actor, ActorAuth, ActorRole
 from app.models.audit import AuditLog
 from app.models.fee import Fee
-from app.models.or_compliance import CollectorCard, CollectorCardFeeSplit, KaraBolamenaCard
+from app.models.or_compliance import CollectorCard, CollectorCardDocument, CollectorCardFeeSplit, KaraBolamenaCard
 from app.models.territory import Commune, District, Region, TerritoryVersion
 
 
@@ -133,6 +133,31 @@ def test_collecteur_cannot_exceed_five_cards(client, db_session):
     assert "limite_cartes_collecteur_atteinte" in str(blocked.json())
 
 
+def test_collecteur_default_card_fee_is_500000(client, db_session):
+    region, district, communes, version = _seed_territory(db_session, commune_count=1)
+    collecteur = _create_actor(
+        db_session,
+        role="collecteur",
+        email="collecteur-fee@test.mg",
+        phone="0341000099",
+        commune_id=communes[0].id,
+        region_id=region.id,
+        district_id=district.id,
+        version_id=version.id,
+    )
+    headers = _auth(client, collecteur.email)
+    res = client.post(
+        "/api/v1/or-compliance/collector-cards",
+        headers=headers,
+        json={"actor_id": collecteur.id, "issuing_commune_id": communes[0].id},
+    )
+    assert res.status_code == 201
+    fee_id = res.json()["fee_id"]
+    fee = db_session.query(Fee).filter(Fee.id == fee_id).first()
+    assert fee is not None
+    assert float(fee.amount) == 500000.0
+
+
 def test_missing_documents_blocks_collector_approval(client, db_session):
     region, district, communes, version = _seed_territory(db_session, commune_count=1)
     collecteur = _create_actor(
@@ -164,6 +189,65 @@ def test_missing_documents_blocks_collector_approval(client, db_session):
     )
     assert request.status_code == 201
     card_id = request.json()["id"]
+    decision = client.patch(
+        f"/api/v1/or-compliance/collector-cards/{card_id}/decision",
+        headers=h_com_admin,
+        json={"decision": "approved"},
+    )
+    assert decision.status_code == 400
+    assert "pieces_obligatoires_manquantes" in str(decision.json())
+
+
+def test_uploaded_but_not_verified_documents_still_block_collector_approval(client, db_session):
+    region, district, communes, version = _seed_territory(db_session, commune_count=1)
+    collecteur = _create_actor(
+        db_session,
+        role="collecteur",
+        email="collecteur-upload@test.mg",
+        phone="0341000203",
+        commune_id=communes[0].id,
+        region_id=region.id,
+        district_id=district.id,
+        version_id=version.id,
+    )
+    com_admin = _create_actor(
+        db_session,
+        role="com_admin",
+        email="com-upload@test.mg",
+        phone="0341000204",
+        commune_id=communes[0].id,
+        region_id=region.id,
+        district_id=district.id,
+        version_id=version.id,
+    )
+    h_collecteur = _auth(client, collecteur.email)
+    h_com_admin = _auth(client, com_admin.email)
+    request = client.post(
+        "/api/v1/or-compliance/collector-cards",
+        headers=h_collecteur,
+        json={"actor_id": collecteur.id, "issuing_commune_id": communes[0].id},
+    )
+    assert request.status_code == 201
+    card_id = request.json()["id"]
+    fee_id = request.json()["fee_id"]
+
+    docs = (
+        db_session.query(CollectorCardDocument)
+        .filter(CollectorCardDocument.collector_card_id == card_id)
+        .all()
+    )
+    assert docs
+    for doc in docs:
+        doc.status = "uploaded"
+    db_session.commit()
+
+    paid = client.post(
+        f"/api/v1/fees/{fee_id}/mark-paid",
+        headers=h_collecteur,
+        json={"payment_ref": "COL-UPLOADED-ONLY"},
+    )
+    assert paid.status_code == 200
+
     decision = client.patch(
         f"/api/v1/or-compliance/collector-cards/{card_id}/decision",
         headers=h_com_admin,
@@ -219,6 +303,59 @@ def test_collector_fee_split_is_50_30_20(client, db_session):
         .first()
         is not None
     )
+
+
+def test_affiliation_type_must_match_target_actor_role(client, db_session):
+    region, district, communes, version = _seed_territory(db_session, commune_count=1)
+    collecteur = _create_actor(
+        db_session,
+        role="collecteur",
+        email="collecteur-aff@test.mg",
+        phone="0341000301",
+        commune_id=communes[0].id,
+        region_id=region.id,
+        district_id=district.id,
+        version_id=version.id,
+    )
+    wrong_target = _create_actor(
+        db_session,
+        role="collecteur",
+        email="wrong-target@test.mg",
+        phone="0341000302",
+        commune_id=communes[0].id,
+        region_id=region.id,
+        district_id=district.id,
+        version_id=version.id,
+    )
+    db_session.add(
+        CollectorCard(
+            actor_id=collecteur.id,
+            issuing_commune_id=communes[0].id,
+            status="active",
+            issued_at=datetime.now(timezone.utc),
+            validated_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=300),
+            affiliation_deadline_at=datetime.now(timezone.utc) + timedelta(days=90),
+        )
+    )
+    db_session.commit()
+    card = db_session.query(CollectorCard).filter(CollectorCard.actor_id == collecteur.id).first()
+    assert card is not None
+    headers = _auth(client, collecteur.email)
+
+    res = client.post(
+        "/api/v1/or-compliance/collector-affiliations",
+        headers=headers,
+        json={
+            "collector_card_id": card.id,
+            "affiliate_actor_id": wrong_target.id,
+            "affiliate_type": "comptoir",
+            "agreement_ref": "AFF-001",
+            "signed_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    assert res.status_code == 400
+    assert "acteur_affiliation_invalide" in str(res.json())
 
 
 def test_affiliation_missing_blocks_or_transaction_and_audit_exists(client, db_session):
